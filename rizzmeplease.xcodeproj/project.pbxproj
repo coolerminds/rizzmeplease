@@ -49,11 +49,25 @@
 			);
 			target = 720C395F2F366A9800F884D4 /* rizzmeplease MessagesExtension */;
 		};
+		720C398B2F36771400F884D4 /* Exceptions for "rizzmeplease" folder in "rizzmeplease" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				BUILD_AND_TEST_GUIDE.md,
+				IMPLEMENTATION_SUMMARY.md,
+				PROJECT_OVERVIEW.md,
+				QUICK_REFERENCE.md,
+				README.md,
+			);
+			target = 720C39562F366A9700F884D4 /* rizzmeplease */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		720C39592F366A9700F884D4 /* rizzmeplease */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				720C398B2F36771400F884D4 /* Exceptions for "rizzmeplease" folder in "rizzmeplease" target */,
+			);
 			path = rizzmeplease;
 			sourceTree = "<group>";
 		};
@@ -421,11 +435,13 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.blurmedia.rizzmeplease;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -444,11 +460,13 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.blurmedia.rizzmeplease;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
