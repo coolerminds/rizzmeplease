@@ -20,18 +20,30 @@ class APIService {
     // MARK: - Suggestions
     
     func generateSuggestions(messages: [Message], goal: Goal, tone: Tone) async throws -> SuggestionResponse {
-        let request = SuggestionRequest(
-            conversation: SuggestionRequest.ConversationData(
-                messages: messages.map { message in
-                    SuggestionRequest.ConversationData.MessageData(
-                        sender: message.sender.rawValue,
-                        text: message.text,
-                        timestamp: ISO8601DateFormatter().string(from: message.timestamp)
-                    )
-                }
-            ),
-            goal: goal.rawValue,
-            tone: tone.rawValue
+        let request = makeSuggestionRequest(
+            messages: messages,
+            goal: goal,
+            tone: tone
+        )
+        
+        return try await post(endpoint: "/suggestions", body: request)
+    }
+    
+    func generateThreadSuggestions(
+        messages: [Message],
+        goal: Goal,
+        tone: Tone,
+        relationshipType: RelationshipType?,
+        extraContext: String?,
+        threadContext: [Message]
+    ) async throws -> SuggestionResponse {
+        let request = makeSuggestionRequest(
+            messages: messages,
+            goal: goal,
+            tone: tone,
+            relationshipType: relationshipType,
+            context: extraContext,
+            threadContext: threadContext
         )
         
         return try await post(endpoint: "/suggestions", body: request)
@@ -76,7 +88,49 @@ class APIService {
     }
     
     // MARK: - Generic Request Methods
-    
+
+    private func makeSuggestionRequest(
+        messages: [Message],
+        goal: Goal,
+        tone: Tone,
+        relationshipType: RelationshipType? = nil,
+        context: String? = nil,
+        threadContext: [Message] = []
+    ) -> SuggestionRequest {
+        let iso8601 = ISO8601DateFormatter()
+        let conversation = SuggestionRequest.ConversationData(
+            messages: messages.map { message in
+                SuggestionRequest.ConversationData.MessageData(
+                    sender: message.sender.rawValue,
+                    text: message.text,
+                    timestamp: iso8601.string(from: message.timestamp)
+                )
+            }
+        )
+        
+        let encodedThreadContext: SuggestionRequest.ConversationData? =
+            threadContext.isEmpty
+            ? nil
+            : SuggestionRequest.ConversationData(
+                messages: threadContext.map { message in
+                    SuggestionRequest.ConversationData.MessageData(
+                        sender: message.sender.rawValue,
+                        text: message.text,
+                        timestamp: iso8601.string(from: message.timestamp)
+                    )
+                }
+            )
+        
+        return SuggestionRequest(
+            conversation: conversation,
+            goal: goal.rawValue,
+            tone: tone.rawValue,
+            relationshipType: relationshipType?.rawValue,
+            context: context,
+            threadContext: encodedThreadContext
+        )
+    }
+
     private func get<T: Decodable>(endpoint: String, queryItems: [URLQueryItem] = []) async throws -> T {
         var components = URLComponents(string: baseURL + endpoint)!
         if !queryItems.isEmpty {

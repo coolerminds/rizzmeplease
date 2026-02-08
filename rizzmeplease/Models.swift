@@ -68,6 +68,26 @@ enum Tone: String, Codable, CaseIterable {
     }
 }
 
+enum RelationshipType: String, Codable, CaseIterable {
+    case friend
+    case stranger
+    case professional
+    case dating
+
+    var displayName: String {
+        rawValue.capitalized
+    }
+
+    var subtitle: String {
+        switch self {
+        case .friend: return "Casual personal conversation"
+        case .stranger: return "Someone you barely know"
+        case .professional: return "Work or business context"
+        case .dating: return "Romantic or dating context"
+        }
+    }
+}
+
 enum Outcome: String, Codable {
     case worked
     case noResponse = "no_response"
@@ -130,6 +150,8 @@ struct Conversation: Identifiable, Codable {
     var messages: [Message]
     var goal: Goal?
     var tone: Tone?
+    var relationshipType: RelationshipType?
+    var extraContext: String?
     var suggestions: [Suggestion]
     var usedSuggestionId: String?
     var outcome: Outcome?
@@ -141,6 +163,8 @@ struct Conversation: Identifiable, Codable {
          messages: [Message] = [],
          goal: Goal? = nil,
          tone: Tone? = nil,
+         relationshipType: RelationshipType? = nil,
+         extraContext: String? = nil,
          suggestions: [Suggestion] = [],
          usedSuggestionId: String? = nil,
          outcome: Outcome? = nil,
@@ -151,6 +175,8 @@ struct Conversation: Identifiable, Codable {
         self.messages = messages
         self.goal = goal
         self.tone = tone
+        self.relationshipType = relationshipType
+        self.extraContext = extraContext
         self.suggestions = suggestions
         self.usedSuggestionId = usedSuggestionId
         self.outcome = outcome
@@ -201,6 +227,25 @@ struct SuggestionRequest: Codable {
     let conversation: ConversationData
     let goal: String
     let tone: String
+    let relationshipType: String?
+    let context: String?
+    let threadContext: ConversationData?
+
+    init(
+        conversation: ConversationData,
+        goal: String,
+        tone: String,
+        relationshipType: String? = nil,
+        context: String? = nil,
+        threadContext: ConversationData? = nil
+    ) {
+        self.conversation = conversation
+        self.goal = goal
+        self.tone = tone
+        self.relationshipType = relationshipType
+        self.context = context
+        self.threadContext = threadContext
+    }
 }
 
 struct SuggestionResponse: Codable {

@@ -28,6 +28,13 @@ class Tone(str, Enum):
     CONFIDENT = "confident"
 
 
+class RelationshipType(str, Enum):
+    FRIEND = "friend"
+    STRANGER = "stranger"
+    PROFESSIONAL = "professional"
+    DATING = "dating"
+
+
 class Outcome(str, Enum):
     WORKED = "worked"
     NO_RESPONSE = "no_response"
@@ -72,6 +79,8 @@ class SuggestionRequest(BaseModel):
     conversation: ConversationData
     goal: Goal
     tone: Tone
+    relationship_type: Optional[RelationshipType] = None
+    thread_context: Optional[ConversationData] = None
     context: Optional[str] = Field(None, max_length=500)
     idempotency_key: str = Field(default_factory=lambda: str(uuid4()))
 

@@ -36,7 +36,13 @@ async def generate_suggestions(
         user_id=user.user_id,
         goal=request.goal.value,
         tone=request.tone.value,
+        relationship_type=request.relationship_type.value
+        if request.relationship_type
+        else None,
         message_count=len(request.conversation.messages),
+        thread_message_count=len(request.thread_context.messages)
+        if request.thread_context
+        else 0,
     )
 
     try:
@@ -46,6 +52,8 @@ async def generate_suggestions(
             goal=request.goal,
             tone=request.tone,
             context=request.context,
+            relationship_type=request.relationship_type,
+            thread_context=request.thread_context,
         )
 
         # Save conversation and suggestions to database

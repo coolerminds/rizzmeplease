@@ -17,6 +17,7 @@ from src.models import (
     Insight,
     InsightPriority,
     InsightType,
+    RelationshipType,
     Suggestion,
     Tone,
 )
@@ -43,17 +44,26 @@ class AIService:
         goal: Goal,
         tone: Tone,
         context: Optional[str] = None,
+        relationship_type: Optional[RelationshipType] = None,
+        thread_context: Optional[ConversationData] = None,
     ) -> list[Suggestion]:
         """Generate 3 reply suggestions based on goal and tone."""
 
-        system_prompt = self._build_system_prompt(goal, tone)
-        user_prompt = self._build_user_prompt(conversation, goal, context)
+        system_prompt = self._build_system_prompt(goal, tone, relationship_type)
+        user_prompt = self._build_user_prompt(
+            conversation=conversation,
+            goal=goal,
+            context=context,
+            thread_context=thread_context,
+        )
 
         logger.info(
             "ai_request_started",
             model=self.model,
             goal=goal.value,
             tone=tone.value,
+            relationship_type=relationship_type.value if relationship_type else None,
+            thread_message_count=len(thread_context.messages) if thread_context else 0,
             prompt_version=self.prompt_version,
         )
 
@@ -134,7 +144,12 @@ class AIService:
             logger.error("coach_analysis_failed", error=str(e))
             raise
 
-    def _build_system_prompt(self, goal: Goal, tone: Tone) -> str:
+    def _build_system_prompt(
+        self,
+        goal: Goal,
+        tone: Tone,
+        relationship_type: Optional[RelationshipType] = None,
+    ) -> str:
         """Build system prompt for suggestion generation."""
 
         goal_instructions = {
@@ -149,6 +164,23 @@ class AIService:
             Tone.WARM: "Be empathetic and caring. Show emotional awareness. Use gentle, supportive language.",
             Tone.CONFIDENT: "Be self-assured without being arrogant. Project security and groundedness. Avoid needy language.",
         }
+
+        relationship_instructions = {
+            RelationshipType.FRIEND: "Treat this as a peer relationship. Keep language natural, respectful, and not overly formal.",
+            RelationshipType.STRANGER: "Prioritize safety, clarity, and politeness. Avoid overfamiliar tone and avoid pressure.",
+            RelationshipType.PROFESSIONAL: "Use professional, concise language. Respect boundaries and avoid flirtatious suggestions.",
+            RelationshipType.DATING: "Allow playful warmth when appropriate, but avoid manipulative, pushy, or objectifying language.",
+        }
+
+        relationship_label = (
+            relationship_type.value.replace("_", " ").title()
+            if relationship_type
+            else "Not specified"
+        )
+        relationship_guidance = relationship_instructions.get(
+            relationship_type,
+            "Use neutral, respectful language and infer context conservatively.",
+        )
 
         return f"""You are an expert texting coach helping users communicate more effectively in dating and social contexts.
 
@@ -166,6 +198,9 @@ GOAL: {goal.value.replace("_", " ").title()}
 
 TONE: {tone.value.title()}
 {tone_instructions[tone]}
+
+RELATIONSHIP TYPE: {relationship_label}
+{relationship_guidance}
 
 OUTPUT FORMAT:
 Respond with valid JSON matching this exact schema:
@@ -186,6 +221,7 @@ Generate exactly 3 unique suggestions, ranked from most to least recommended."""
         conversation: ConversationData,
         goal: Goal,
         context: Optional[str] = None,
+        thread_context: Optional[ConversationData] = None,
     ) -> str:
         """Build user prompt with conversation and context."""
 
@@ -200,6 +236,13 @@ Generate exactly 3 unique suggestions, ranked from most to least recommended."""
 
 Generate 3 reply suggestions for the user's next message.
 Goal: {goal.value.replace("_", " ").title()}"""
+
+        if thread_context and thread_context.messages:
+            thread_messages = "\n".join(
+                f"{'You' if msg.sender.lower() == 'you' else 'Them'}: {msg.text}"
+                for msg in thread_context.messages
+            )
+            prompt += f"\n\nThread context from iMessage extension:\n{thread_messages}"
 
         if context:
             prompt += f"\n\nAdditional context: {context}"
