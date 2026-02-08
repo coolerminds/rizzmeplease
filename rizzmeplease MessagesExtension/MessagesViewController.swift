@@ -115,11 +115,12 @@ private enum ThreadWorkflowStage: String, CaseIterable {
 }
 
 private enum ThreadSuggestionEvent {
+    case toggleCoachExpanded(Bool)
     case toggleMockMode(Bool)
     case loadSampleTranscript
     case updateGoal(ExtensionGoal)
-    case updateTone(ExtensionTone)
-    case updateRelationship(ExtensionRelationshipType)
+    case updateMood(UIMood)
+    case updateRelationship(UIRelationship)
     case updateExtraContext(String)
     case updateTranscript(String)
     case generateTapped
@@ -136,9 +137,10 @@ private final class ThreadSuggestionViewModel: ObservableObject {
     private static let mockModeKey = "messages_extension_mock_mode_enabled"
 
     @Published var workflowStage: ThreadWorkflowStage = .configure
+    @Published var isCoachExpanded = false
     @Published var goal: ExtensionGoal = .getReply
-    @Published var tone: ExtensionTone = .friendly
-    @Published var relationshipType: ExtensionRelationshipType = .friend
+    @Published var uiMood: UIMood = .friendly
+    @Published var uiRelationship: UIRelationship = .friend
     @Published var extraContext = ""
     @Published var transcriptInput = ""
     @Published var suggestions: [ExtensionSuggestion] = []
@@ -187,6 +189,11 @@ private final class ThreadSuggestionViewModel: ObservableObject {
 
     func dispatch(_ event: ThreadSuggestionEvent) {
         switch event {
+        case .toggleCoachExpanded(let expanded):
+            isCoachExpanded = expanded
+            workflowStage = expanded ? workflowStage : .configure
+            recordEvent(expanded ? "coach_expanded" : "coach_collapsed")
+
         case .toggleMockMode(let enabled):
             setMockMode(enabled)
             workflowStage = .configure
@@ -202,13 +209,13 @@ private final class ThreadSuggestionViewModel: ObservableObject {
             workflowStage = .configure
             recordEvent("goal_\(goal.rawValue)")
 
-        case .updateTone(let tone):
-            self.tone = tone
+        case .updateMood(let mood):
+            uiMood = mood
             workflowStage = .configure
-            recordEvent("tone_\(tone.rawValue)")
+            recordEvent("mood_\(mood.rawValue)")
 
         case .updateRelationship(let relationship):
-            relationshipType = relationship
+            uiRelationship = relationship
             workflowStage = .configure
             recordEvent("relationship_\(relationship.rawValue)")
 
@@ -279,35 +286,21 @@ private final class ThreadSuggestionViewModel: ObservableObject {
     }
 
     func loadMockTranscript() {
-        switch relationshipType {
-        case .friend:
+        switch uiRelationship {
+        case .friend, .family:
             transcriptInput = """
             Them: You still down for dinner tonight?
             You: Yeah, maybe 20 minutes late.
             Them: No stress. Want me to order for you?
             """
             extraContext = "I want to sound considerate without overexplaining."
-        case .stranger:
-            transcriptInput = """
-            Them: Hey, we met at the event yesterday.
-            You: Hey, good to hear from you.
-            Them: Want to grab coffee sometime?
-            """
-            extraContext = "Keep things friendly and safe."
-        case .professional:
+        case .colleague, .boss:
             transcriptInput = """
             Them: Can you send the revised deck today?
             You: I can send an updated version this afternoon.
             Them: Great, what time should I expect it?
             """
             extraContext = "Clear and professional tone."
-        case .dating:
-            transcriptInput = """
-            Them: Last night was fun.
-            You: Agreed, I had a good time too.
-            Them: Want to do something this weekend?
-            """
-            extraContext = "Confident but warm."
         }
     }
 
@@ -395,8 +388,8 @@ private final class ThreadSuggestionViewModel: ObservableObject {
         let request = ExtensionSuggestionRequest(
             conversation: .init(messages: messages),
             goal: goal.rawValue,
-            tone: tone.rawValue,
-            relationshipType: relationshipType.rawValue,
+            tone: uiMood.backendTone.rawValue,
+            relationshipType: uiRelationship.backendRelationship.rawValue,
             context: normalizedExtraContext,
             threadContext: threadContextFromSelection()
         )
@@ -485,7 +478,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
     }
 
     private func mockSuggestionResult(modePrefix: String) -> ExtensionSuggestionsResult {
-        let key = "\(goal.rawValue)_\(relationshipType.rawValue)_\(tone.rawValue)"
+        let key = "\(goal.rawValue)_\(uiRelationship.rawValue)_\(uiMood.rawValue)"
         let suggestionSetId = "\(modePrefix)_set_\(key)"
         let base = mockSuggestionText()
 
@@ -494,7 +487,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
                 id: "\(modePrefix)_\(key)_\(index + 1)",
                 rank: index + 1,
                 text: text,
-                rationale: "\(tone.title) \(modePrefix) suggestion for \(relationshipType.title.lowercased()) context.",
+                rationale: "\(uiMood.title) \(modePrefix) suggestion for \(uiRelationship.title.lowercased()) context.",
                 confidenceScore: nil
             )
         }
@@ -506,7 +499,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
     }
 
     private func mockSuggestionText() -> [String] {
-        switch (goal, relationshipType) {
+        switch (goal, uiRelationship.backendRelationship) {
         case (.getReply, .friend):
             return [
                 "Love that. What ended up happening after?",
@@ -626,16 +619,16 @@ private struct ThreadSuggestionRootView: View {
         )
     }
 
-    private var toneBinding: Binding<ExtensionTone> {
+    private var moodBinding: Binding<UIMood> {
         Binding(
-            get: { viewModel.tone },
-            set: { viewModel.dispatch(.updateTone($0)) }
+            get: { viewModel.uiMood },
+            set: { viewModel.dispatch(.updateMood($0)) }
         )
     }
 
-    private var relationshipBinding: Binding<ExtensionRelationshipType> {
+    private var relationshipBinding: Binding<UIRelationship> {
         Binding(
-            get: { viewModel.relationshipType },
+            get: { viewModel.uiRelationship },
             set: { viewModel.dispatch(.updateRelationship($0)) }
         )
     }
@@ -676,54 +669,160 @@ private struct ThreadSuggestionRootView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    workflowLayer
-                    contextLayer
-                    composerLayer
-                    suggestionsLayer
+        ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
 
-                    if viewModel.selectedSuggestionId != nil {
-                        feedbackLayer
-                    }
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 12) {
+                    headerLayer
 
-                    if !viewModel.recentEvents.isEmpty {
-                        eventLayer
+                    if viewModel.isCoachExpanded {
+                        VStack(alignment: .leading, spacing: 12) {
+                            workflowLayer
+                            modeLayer
+                            goalLayer
+                            moodLayer
+                            relationshipLayer
+                            composerLayer
+                            suggestionsLayer
+
+                            if viewModel.selectedSuggestionId != nil {
+                                feedbackLayer
+                                    .transition(
+                                        .asymmetric(
+                                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                                            removal: .opacity
+                                        )
+                                    )
+                            }
+
+                            #if DEBUG
+                            if !viewModel.recentEvents.isEmpty {
+                                eventLayer
+                            }
+                            #endif
+                        }
+                        .transition(
+                            .asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .opacity
+                            )
+                        )
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
             }
-            .navigationTitle("Text Coach")
-            .navigationBarTitleDisplayMode(.inline)
+        }
+        .animation(.spring(response: 0.34, dampingFraction: 0.85), value: viewModel.isCoachExpanded)
+        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: viewModel.workflowStage)
+    }
+
+    private func setCoachExpanded(_ expanded: Bool) {
+        viewModel.dispatch(.toggleCoachExpanded(expanded))
+        if expanded && viewModel.presentationStyle == .compact {
+            onExpand()
         }
     }
 
+    private var headerLayer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Text Coach")
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                    Text("iMessage only shares limited thread context. Paste recent lines for better quality.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 6)
+
+                Button {
+                    setCoachExpanded(!viewModel.isCoachExpanded)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(viewModel.isCoachExpanded ? "Collapse" : "Expand")
+                            .font(.subheadline.weight(.semibold))
+                        Image(systemName: viewModel.isCoachExpanded ? "chevron.down" : "chevron.up")
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.12))
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(viewModel.isCoachExpanded ? "Collapse text coach panel" : "Expand text coach panel")
+                .accessibilityHint("Shows or hides the advanced drafting controls")
+            }
+
+            if let status = statusMessage {
+                Text(status.text)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(status.color)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(status.color.opacity(0.12))
+                    .clipShape(Capsule(style: .continuous))
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(.systemBackground))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+    }
+
+    private var statusMessage: (text: String, color: Color)? {
+        if let error = viewModel.errorMessage, !error.isEmpty {
+            return (error, .red)
+        }
+        if viewModel.usedFallback {
+            return ("Live API unavailable. Showing local fallback drafts.", .orange)
+        }
+        if let feedback = viewModel.feedbackStatusMessage, !feedback.isEmpty {
+            return (feedback, .secondary)
+        }
+        return nil
+    }
+
     private var workflowLayer: some View {
-        LayerCard(
+        DynamicLayerCard(
             title: "Workflow",
             subtitle: viewModel.workflowHint
         ) {
-            if viewModel.presentationStyle == .compact {
-                Button("Open Full Composer") {
-                    onExpand()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(ThreadWorkflowStage.allCases, id: \.self) { stage in
-                        Text(stage.title)
-                            .font(.caption)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                stage == viewModel.workflowStage
-                                ? Color.accentColor.opacity(0.2)
-                                : Color.secondary.opacity(0.12)
-                            )
-                            .clipShape(Capsule())
+                        let isCurrent = stage == viewModel.workflowStage
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(isCurrent ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color.secondary.opacity(0.25))
+                                .frame(width: 8, height: 8)
+                            Text(stage.title)
+                                .font(.caption.weight(isCurrent ? .semibold : .regular))
+                        }
+                        .foregroundStyle(isCurrent ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(
+                                    isCurrent
+                                    ? Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.14)
+                                    : Color.secondary.opacity(0.10)
+                                )
+                        )
                     }
                 }
             }
@@ -732,111 +831,191 @@ private struct ThreadSuggestionRootView: View {
                 Text("Inserted draft: \(inserted)")
                     .font(.caption)
                     .foregroundStyle(.green)
+                    .lineLimit(2)
             }
         }
     }
 
-    private var contextLayer: some View {
-        LayerCard(
-            title: "Context Layer",
-            subtitle: "Mode and thread context"
+    private var modeLayer: some View {
+        DynamicLayerCard(
+            title: "Mode",
+            subtitle: "Switch between local and live behavior"
         ) {
-            Text("iMessage only shares limited thread context. Paste recent lines for better quality.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Toggle(isOn: mockModeBinding) {
+                Text("Local Mock Mode")
+                    .font(.subheadline)
+            }
+            .tint(Color(red: 0.20, green: 0.78, blue: 0.35))
+            .accessibilityLabel("Local mock mode")
 
-            Toggle("Local Mock Mode", isOn: mockModeBinding)
-
-            Button("Load Sample Transcript") {
+            Button("Load Sample Transcript ◇") {
                 viewModel.dispatch(.loadSampleTranscript)
             }
-            .buttonStyle(.bordered)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
+            .buttonStyle(.plain)
+            .frame(minHeight: 44, alignment: .leading)
+            .accessibilityLabel("Load sample transcript")
 
             if !viewModel.selectedMessageSummary.isEmpty {
-                Text("Selected thread context: \(viewModel.selectedMessageSummary)")
+                Text("Selected context: \(viewModel.selectedMessageSummary)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+    }
+
+    private var goalLayer: some View {
+        DynamicLayerCard(
+            title: "Goal",
+            subtitle: "Pick your drafting objective"
+        ) {
+            HStack(spacing: 8) {
+                ForEach(ExtensionGoal.allCases) { goal in
+                    SelectionChip(
+                        title: goal.title,
+                        subtitle: nil,
+                        emoji: nil,
+                        isSelected: goalBinding.wrappedValue == goal,
+                        minHeight: 44
+                    ) {
+                        goalBinding.wrappedValue = goal
+                    }
+                }
+            }
+        }
+    }
+
+    private var moodLayer: some View {
+        DynamicLayerCard(
+            title: "Mood",
+            subtitle: "Guide style and energy"
+        ) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(UIMood.allCases) { mood in
+                    SelectionChip(
+                        title: mood.title,
+                        subtitle: nil,
+                        emoji: mood.emoji,
+                        isSelected: moodBinding.wrappedValue == mood,
+                        minHeight: 50
+                    ) {
+                        moodBinding.wrappedValue = mood
+                    }
+                    .accessibilityLabel("\(mood.title) mood")
+                }
+            }
+        }
+    }
+
+    private var relationshipLayer: some View {
+        DynamicLayerCard(
+            title: "Relationship",
+            subtitle: "Tune language to the person"
+        ) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+                ForEach(UIRelationship.allCases) { relationship in
+                    SelectionChip(
+                        title: relationship.title,
+                        subtitle: nil,
+                        emoji: relationship.emoji,
+                        isSelected: relationshipBinding.wrappedValue == relationship,
+                        minHeight: 50
+                    ) {
+                        relationshipBinding.wrappedValue = relationship
+                    }
+                    .accessibilityLabel("\(relationship.title) relationship")
+                }
             }
         }
     }
 
     private var composerLayer: some View {
-        LayerCard(
-            title: "Composer Layer",
-            subtitle: "Intent and source text"
+        DynamicLayerCard(
+            title: "Composer",
+            subtitle: "Context and transcript"
         ) {
-            Picker("Goal", selection: goalBinding) {
-                ForEach(ExtensionGoal.allCases) { goal in
-                    Text(goal.title).tag(goal)
-                }
-            }
-            .pickerStyle(.menu)
-
-            Picker("Tone", selection: toneBinding) {
-                ForEach(ExtensionTone.allCases) { tone in
-                    Text(tone.title).tag(tone)
-                }
-            }
-            .pickerStyle(.menu)
-
-            Picker("Relationship", selection: relationshipBinding) {
-                ForEach(ExtensionRelationshipType.allCases) { relationship in
-                    Text(relationship.title).tag(relationship)
-                }
-            }
-            .pickerStyle(.menu)
-
             VStack(alignment: .leading, spacing: 4) {
                 Text("Extra Context")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextField("Anything important to include?", text: extraContextBinding)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(Color(.systemGray6))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    )
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Transcript (Them:/You:)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                TextEditor(text: transcriptBinding)
-                    .frame(minHeight: 120)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                    )
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Them:")
+                        .font(.subheadline.weight(.medium))
+                    Text("You:")
+                        .font(.subheadline.weight(.medium))
+
+                    TextEditor(text: transcriptBinding)
+                        .frame(minHeight: 100)
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(Color(.systemGray6))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                        )
+                }
             }
 
             Button {
                 viewModel.dispatch(.generateTapped)
             } label: {
-                if viewModel.isLoading && !viewModel.isMockModeEnabled {
+                if viewModel.isLoading {
                     ProgressView()
+                        .tint(.white)
                         .frame(maxWidth: .infinity)
+                        .frame(minHeight: 46)
                 } else {
                     Text("Generate Drafts")
-                        .frame(maxWidth: .infinity)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 46)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(viewModel.canGenerate ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color(.systemGray3))
+            )
+            .buttonStyle(.plain)
             .disabled(!viewModel.canGenerate)
+            .accessibilityLabel("Generate drafts")
         }
     }
 
     private var suggestionsLayer: some View {
-        LayerCard(
-            title: "Suggestions Layer",
-            subtitle: "Insert selected draft into thread"
+        DynamicLayerCard(
+            title: "Suggestions",
+            subtitle: "Tap insert to place draft into compose box"
         ) {
-            if viewModel.usedFallback {
-                Text("Using local fallback suggestions.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-
-            if let errorMessage = viewModel.errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+            if viewModel.isLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Generating drafts...")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if viewModel.suggestions.isEmpty {
@@ -846,35 +1025,62 @@ private struct ThreadSuggestionRootView: View {
             } else {
                 ForEach(viewModel.suggestions) { suggestion in
                     VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("#\(suggestion.rank)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.12))
+                                .clipShape(Capsule(style: .continuous))
+                            Spacer(minLength: 4)
+                            if let confidence = suggestion.confidenceScore {
+                                Text("\(Int(confidence * 100))%")
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
                         Text(suggestion.text)
                             .font(.body)
+
                         Text(suggestion.rationale)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
                         Button("Insert Draft") {
                             onInsertDraft(suggestion)
                         }
-                        .buttonStyle(.bordered)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
+                        .buttonStyle(.plain)
+                        .frame(minHeight: 44, alignment: .leading)
+                        .accessibilityLabel("Insert draft number \(suggestion.rank)")
                     }
                     .padding(10)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
     }
 
     private var feedbackLayer: some View {
-        LayerCard(
-            title: "Feedback Layer",
-            subtitle: "Log outcome to improve future suggestions"
+        DynamicLayerCard(
+            title: "Feedback",
+            subtitle: "Tell us how the inserted draft performed"
         ) {
             Picker("Outcome", selection: outcomeBinding) {
                 ForEach(ExtensionFeedbackOutcome.allCases) { outcome in
                     Text(outcome.title).tag(outcome)
                 }
             }
-            .pickerStyle(.menu)
+            .pickerStyle(.segmented)
 
             TextField("Optional feedback notes", text: notesBinding)
                 .textFieldStyle(.roundedBorder)
@@ -885,13 +1091,21 @@ private struct ThreadSuggestionRootView: View {
                 if viewModel.isSubmittingFeedback {
                     ProgressView()
                         .frame(maxWidth: .infinity)
+                        .frame(minHeight: 44)
                 } else {
                     Text("Submit Feedback")
-                        .frame(maxWidth: .infinity)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(viewModel.canSubmitFeedback ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color(.systemGray3))
+            )
+            .buttonStyle(.plain)
             .disabled(!viewModel.canSubmitFeedback)
+            .accessibilityLabel("Submit feedback")
 
             if let feedbackMessage = viewModel.feedbackStatusMessage {
                 Text(feedbackMessage)
@@ -915,7 +1129,7 @@ private struct ThreadSuggestionRootView: View {
     }
 
     private var eventLayer: some View {
-        LayerCard(
+        DynamicLayerCard(
             title: "Event Stream",
             subtitle: "Recent UI events"
         ) {
@@ -929,7 +1143,7 @@ private struct ThreadSuggestionRootView: View {
     }
 }
 
-private struct LayerCard<Content: View>: View {
+private struct DynamicLayerCard<Content: View>: View {
     let title: String
     let subtitle: String
     @ViewBuilder let content: Content
@@ -938,20 +1152,160 @@ private struct LayerCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(.headline.weight(.semibold))
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             content
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(13)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 3)
+    }
+}
+
+private struct SelectionChip: View {
+    let title: String
+    let subtitle: String?
+    let emoji: String?
+    let isSelected: Bool
+    let minHeight: CGFloat
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .center, spacing: subtitle == nil ? 0 : 2) {
+                HStack(spacing: 4) {
+                    if let emoji {
+                        Text(emoji)
+                    }
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                }
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(
+                isSelected
+                ? Color(red: 0.00, green: 0.48, blue: 1.00)
+                : .primary
+            )
+            .frame(maxWidth: .infinity, minHeight: minHeight)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(
+                        isSelected
+                        ? Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.14)
+                        : Color(.systemGray6)
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(
+                        isSelected
+                        ? Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.45)
+                        : Color.black.opacity(0.06),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 }
 
 // MARK: - API Models
+
+private enum UIMood: String, CaseIterable, Identifiable {
+    case friendly
+    case professional
+    case casual
+    case excited
+    case empathetic
+    case formal
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .friendly: return "Friendly"
+        case .professional: return "Professional"
+        case .casual: return "Casual"
+        case .excited: return "Excited"
+        case .empathetic: return "Empathetic"
+        case .formal: return "Formal"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .friendly: return "😊"
+        case .professional: return "💼"
+        case .casual: return "😎"
+        case .excited: return "🎉"
+        case .empathetic: return "💙"
+        case .formal: return "🤝"
+        }
+    }
+
+    var backendTone: ExtensionTone {
+        switch self {
+        case .friendly: return .friendly
+        case .professional: return .direct
+        case .casual: return .friendly
+        case .excited: return .confident
+        case .empathetic: return .warm
+        case .formal: return .direct
+        }
+    }
+}
+
+private enum UIRelationship: String, CaseIterable, Identifiable {
+    case friend
+    case colleague
+    case family
+    case boss
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .friend: return "Friend"
+        case .colleague: return "Colleague"
+        case .family: return "Family"
+        case .boss: return "Boss"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .friend: return "👥"
+        case .colleague: return "💼"
+        case .family: return "👨‍👩‍👧"
+        case .boss: return "👔"
+        }
+    }
+
+    var backendRelationship: ExtensionRelationshipType {
+        switch self {
+        case .friend: return .friend
+        case .colleague: return .professional
+        case .family: return .friend
+        case .boss: return .professional
+        }
+    }
+}
 
 private enum ExtensionGoal: String, CaseIterable, Identifiable {
     case getReply = "get_reply"
