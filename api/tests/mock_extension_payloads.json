@@ -1,0 +1,67 @@
+{
+  "suggestion_requests": [
+    {
+      "name": "dating_get_reply_friendly",
+      "conversation": {
+        "messages": [
+          {
+            "sender": "them",
+            "text": "Last night was fun.",
+            "timestamp": "2026-02-08T10:00:00Z"
+          },
+          {
+            "sender": "you",
+            "text": "I had a great time too.",
+            "timestamp": "2026-02-08T10:00:30Z"
+          },
+          {
+            "sender": "them",
+            "text": "We should do it again.",
+            "timestamp": "2026-02-08T10:01:00Z"
+          }
+        ]
+      },
+      "goal": "get_reply",
+      "tone": "friendly",
+      "relationship_type": "dating",
+      "context": "I want to sound interested but relaxed."
+    },
+    {
+      "name": "professional_set_boundary_direct",
+      "conversation": {
+        "messages": [
+          {
+            "sender": "them",
+            "text": "Can you finish this by tonight?",
+            "timestamp": "2026-02-08T14:00:00Z"
+          },
+          {
+            "sender": "you",
+            "text": "I can review tomorrow morning.",
+            "timestamp": "2026-02-08T14:05:00Z"
+          }
+        ]
+      },
+      "goal": "set_boundary",
+      "tone": "direct",
+      "relationship_type": "professional",
+      "context": "Be clear and respectful."
+    }
+  ],
+  "feedback_requests": [
+    {
+      "suggestion_set_id": "set_abc123",
+      "suggestion_id": "sug_001",
+      "outcome": "worked",
+      "follow_up_text": null,
+      "notes": "User sent draft with minor edits."
+    },
+    {
+      "suggestion_set_id": "set_abc123",
+      "suggestion_id": "sug_002",
+      "outcome": "no_response",
+      "follow_up_text": null,
+      "notes": "No reply after 24 hours."
+    }
+  ]
+}
