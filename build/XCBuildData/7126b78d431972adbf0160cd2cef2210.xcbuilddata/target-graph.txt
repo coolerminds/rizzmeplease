@@ -1,0 +1,4 @@
+Target dependency graph (2 targets)
+Target 'rizzmeplease' in project 'rizzmeplease'
+➜ Explicit dependency on target 'rizzmeplease MessagesExtension' in project 'rizzmeplease'
+Target 'rizzmeplease MessagesExtension' in project 'rizzmeplease' (no dependencies)

@@ -1,0 +1,56 @@
+{
+  "source": "/Volumes/4tb slow/devOPs/rizzmeplease/rizzmeplease MessagesExtension/MessagesViewController.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "RizzHelper",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 661
+        }
+      },
+      {
+        "comment": "",
+        "key": "25",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 669
+        }
+      },
+      {
+        "comment": "",
+        "key": "They love hiking, dogs, etc...",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 770
+        }
+      },
+      {
+        "comment": "",
+        "key": "Generating...",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 796
+        }
+      },
+      {
+        "comment": "",
+        "key": "Generate Replies",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 796
+        }
+      },
+      {
+        "comment": "",
+        "key": "Insert Draft",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 816
+        }
+      }
+    ]
+  },
+  "version": 1
+}

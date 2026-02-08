@@ -2,6 +2,9 @@
 
 FastAPI backend for the RizzMePlease iOS text coaching app.
 
+Production base path is expected to be served at `https://rizzmeow.com/api/v1`
+via reverse proxy to this FastAPI app.
+
 ## Quick Start
 
 ### 1. Install dependencies
@@ -52,6 +55,16 @@ python -m src.main
 ### 5. Test the API
 
 Open http://localhost:8000/docs for interactive Swagger documentation.
+
+### 6. Smoke tests
+
+```bash
+# Direct xAI/Grok connectivity (treats 402 no-credit as soft pass)
+python scripts/grok_smoke_test.py
+
+# End-to-end local API smoke test (auth + suggestions)
+python scripts/api_suggestions_smoke.py --base-url http://127.0.0.1:8000
+```
 
 ## API Endpoints
 

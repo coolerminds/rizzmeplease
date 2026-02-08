@@ -1190,11 +1190,13 @@ private enum ThreadSuggestionServiceError: Error, LocalizedError {
 
 private actor ThreadSuggestionService {
     private let baseURLString: String = {
-        #if DEBUG
-        return "http://127.0.0.1:8000/api/v1"
-        #else
-        return "https://api.textcoach.app/api/v1"
-        #endif
+        if let configured = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String {
+            let trimmed = configured.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+        return "https://rizzmeow.com/api/v1"
     }()
     private let tokenKey = "messages_extension_access_token"
     private let tokenCreatedAtKey = "messages_extension_token_created_at"

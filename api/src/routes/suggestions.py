@@ -196,14 +196,15 @@ def _log_safety_signals(
 ) -> None:
     """Log soft safety/profanity signals without blocking the request."""
 
+    thread_messages = (
+        [msg.text for msg in request.thread_context.messages]
+        if request.thread_context
+        else []
+    )
     corpus = " ".join(
         [
             *(msg.text for msg in request.conversation.messages),
-            *(
-                msg.text
-                for msg in request.thread_context.messages
-                if request.thread_context
-            ),
+            *thread_messages,
             request.context or "",
         ]
     ).lower()

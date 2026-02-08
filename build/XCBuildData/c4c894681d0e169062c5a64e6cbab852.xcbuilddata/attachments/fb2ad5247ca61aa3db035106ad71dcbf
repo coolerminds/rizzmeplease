@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/rizzmeplease MessagesExtension-primary.dia",
+    "emit-module-dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/rizzmeplease MessagesExtension-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/rizzmeplease MessagesExtension-primary-emit-module.dia",
+    "pch" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/rizzmeplease MessagesExtension-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/rizzmeplease MessagesExtension-primary.swiftdeps"
+  },
+  "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.bc",
+    "object" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Volumes/4tb slow/devOPs/rizzmeplease/rizzmeplease MessagesExtension/MessagesViewController.swift" : {
+    "const-values" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.swiftconstvalues",
+    "dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.d",
+    "diagnostics" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.dia",
+    "index-unit-output-path" : "/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.o",
+    "llvm-bc" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.bc",
+    "object" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.o",
+    "swift-dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController.swiftdeps",
+    "swiftmodule" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/MessagesViewController~partial.swiftmodule"
+  },
+  "/Volumes/4tb slow/devOPs/rizzmeplease/rizzmeplease MessagesExtension/TextCoachApp.swift" : {
+    "const-values" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.swiftconstvalues",
+    "dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.d",
+    "diagnostics" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.dia",
+    "index-unit-output-path" : "/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.o",
+    "llvm-bc" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.bc",
+    "object" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.o",
+    "swift-dependencies" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp.swiftdeps",
+    "swiftmodule" : "/Volumes/4tb slow/devOPs/rizzmeplease/build/rizzmeplease.build/Debug-iphonesimulator/rizzmeplease MessagesExtension.build/Objects-normal/x86_64/TextCoachApp~partial.swiftmodule"
+  }
+}

@@ -46,6 +46,32 @@
       "tone": "direct",
       "relationship_type": "professional",
       "context": "Be clear and respectful."
+    },
+    {
+      "name": "rizzcoach_chill_friend_get_reply",
+      "conversation": {
+        "messages": [
+          {
+            "sender": "them",
+            "text": "Hey! Are you free this weekend?",
+            "timestamp": "2026-02-08T18:00:00Z"
+          },
+          {
+            "sender": "you",
+            "text": "I should be. What did you have in mind?",
+            "timestamp": "2026-02-08T18:02:00Z"
+          },
+          {
+            "sender": "them",
+            "text": "Maybe coffee and a walk if weather is good.",
+            "timestamp": "2026-02-08T18:03:30Z"
+          }
+        ]
+      },
+      "goal": "get_reply",
+      "tone": "warm",
+      "relationship_type": "friend",
+      "context": "Keep it chill and positive."
     }
   ],
   "feedback_requests": [

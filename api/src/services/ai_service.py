@@ -4,7 +4,6 @@ RizzMePlease API - AI Service (OpenAI/xAI Integration)
 
 import json
 import time
-from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 

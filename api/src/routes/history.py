@@ -3,6 +3,7 @@ RizzMePlease API - History Routes
 """
 
 import math
+from datetime import datetime, timedelta
 from typing import Optional
 
 import structlog
@@ -10,6 +11,9 @@ from fastapi import APIRouter, Query
 
 from src.middleware import CurrentUser
 from src.models import (
+    DemoHistoryData,
+    DemoHistoryItem,
+    DemoHistoryResponse,
     Goal,
     HistoryData,
     HistoryResponse,
@@ -20,6 +24,44 @@ from src.services.database import db
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/history", tags=["history"])
+
+
+@router.get("/demo", response_model=DemoHistoryResponse)
+async def get_demo_history() -> DemoHistoryResponse:
+    """Return deterministic demo history for UI bootstrap/testing."""
+
+    now = datetime.utcnow()
+    items = [
+        DemoHistoryItem(
+            id="demo_friend_chill",
+            vibe="chill",
+            relationship="friend",
+            context="Weekend plans, keep it casual.",
+            transcript="Them: Hey! Are you free this weekend?\nYou: Let me check...",
+            reply="Sounds good. Want to keep it low-key and grab coffee?",
+            created_at=now - timedelta(days=2),
+        ),
+        DemoHistoryItem(
+            id="demo_work_classy",
+            vibe="classy",
+            relationship="work",
+            context="Professional follow-up with clear timeline.",
+            transcript="Them: Can you send the revised deck today?\nYou: I can send an update this afternoon.",
+            reply="Absolutely. I will send the revised deck by 3 PM with notes.",
+            created_at=now - timedelta(days=1, hours=5),
+        ),
+        DemoHistoryItem(
+            id="demo_dating_flirty",
+            vibe="flirty",
+            relationship="dating",
+            context="Playful but respectful.",
+            transcript="Them: Last night was fun.\nYou: I had a great time too.",
+            reply="I liked the vibe too. Want to do round two this week?",
+            created_at=now - timedelta(hours=18),
+        ),
+    ]
+
+    return DemoHistoryResponse(success=True, data=DemoHistoryData(items=items))
 
 
 @router.get("", response_model=HistoryResponse)
