@@ -215,6 +215,31 @@ class HistoryResponse(BaseModel):
     data: HistoryData
 
 
+class DemoHistoryItem(BaseModel):
+    """Sample history item for client-side demo hydration."""
+
+    id: str
+    vibe: str
+    relationship: str
+    context: str
+    transcript: str
+    reply: str
+    created_at: datetime
+
+
+class DemoHistoryData(BaseModel):
+    """Demo history response data."""
+
+    items: list[DemoHistoryItem]
+
+
+class DemoHistoryResponse(BaseModel):
+    """Full demo history API response."""
+
+    success: bool = True
+    data: DemoHistoryData
+
+
 # ============================================================================
 # Error Models
 # ============================================================================

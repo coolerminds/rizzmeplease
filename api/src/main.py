@@ -66,7 +66,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=get_settings().cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -138,6 +138,7 @@ async def general_exception_handler(
 async def add_request_context(request: Request, call_next):
     """Add request ID and logging context to each request."""
     request_id = request.headers.get("X-Request-ID", str(uuid4()))
+    request.state.request_id = request_id
 
     # Log request
     logger.info(
@@ -169,6 +170,12 @@ async def add_request_context(request: Request, call_next):
 @app.get("/health")
 async def health_check() -> dict:
     """Health check endpoint."""
+    return {"status": "healthy", "version": "1.0.0"}
+
+
+@app.get("/api/health")
+async def api_health_check() -> dict:
+    """Health check alias for reverse proxies that route under /api."""
     return {"status": "healthy", "version": "1.0.0"}
 
 

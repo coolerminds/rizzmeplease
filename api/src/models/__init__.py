@@ -6,6 +6,9 @@ from src.models.schemas import (
     CoachAnalyzeRequest,
     ConversationData,
     CreateUserRequest,
+    DemoHistoryData,
+    DemoHistoryItem,
+    DemoHistoryResponse,
     ErrorDetail,
     ErrorResponse,
     FeedbackRequest,
@@ -58,4 +61,7 @@ __all__ = [
     "ErrorResponse",
     "TokenData",
     "CreateUserRequest",
+    "DemoHistoryItem",
+    "DemoHistoryData",
+    "DemoHistoryResponse",
 ]

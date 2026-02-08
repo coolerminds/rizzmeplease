@@ -3,12 +3,20 @@ RizzMePlease API - AI Service (OpenAI/xAI Integration)
 """
 
 import json
-import structlog
+import time
 from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from openai import AsyncOpenAI
+import structlog
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    RateLimitError,
+)
 
 from src.config import get_settings
 from src.models import (
@@ -25,6 +33,26 @@ from src.models import (
 logger = structlog.get_logger()
 
 
+class AIServiceError(Exception):
+    """Structured AI service error for stable route-level handling."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        status_code: int = 502,
+        retryable: bool = False,
+        provider_status: Optional[int] = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+        self.retryable = retryable
+        self.provider_status = provider_status
+
+
 class AIService:
     """Handles all AI-powered suggestion and analysis generation."""
 
@@ -36,7 +64,7 @@ class AIService:
             timeout=settings.openai_timeout,
         )
         self.model = settings.openai_model
-        self.prompt_version = "v1.0"
+        self.prompt_version = "v1.1"
 
     async def generate_suggestions(
         self,
@@ -46,6 +74,7 @@ class AIService:
         context: Optional[str] = None,
         relationship_type: Optional[RelationshipType] = None,
         thread_context: Optional[ConversationData] = None,
+        request_id: Optional[str] = None,
     ) -> list[Suggestion]:
         """Generate 3 reply suggestions based on goal and tone."""
 
@@ -59,6 +88,7 @@ class AIService:
 
         logger.info(
             "ai_request_started",
+            request_id=request_id,
             model=self.model,
             goal=goal.value,
             tone=tone.value,
@@ -67,6 +97,7 @@ class AIService:
             prompt_version=self.prompt_version,
         )
 
+        started = time.perf_counter()
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -81,27 +112,55 @@ class AIService:
 
             content = response.choices[0].message.content
             if not content:
-                raise ValueError("Empty response from AI")
+                raise AIServiceError(
+                    "AI_PARSE_ERROR",
+                    "AI returned an empty response.",
+                    status_code=502,
+                    retryable=False,
+                )
 
-            suggestions_data = json.loads(content)
+            suggestions_data = self._extract_json_object(content)
+            suggestions = self._parse_suggestions(suggestions_data)
+            if not suggestions:
+                raise AIServiceError(
+                    "AI_PARSE_ERROR",
+                    "AI response did not contain valid suggestions.",
+                    status_code=502,
+                    retryable=False,
+                )
 
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
                 "ai_request_completed",
+                request_id=request_id,
                 model=self.model,
+                latency_ms=elapsed_ms,
                 input_tokens=response.usage.prompt_tokens if response.usage else 0,
                 output_tokens=response.usage.completion_tokens if response.usage else 0,
             )
 
-            return self._parse_suggestions(suggestions_data)
+            return suggestions
 
-        except Exception as e:
-            logger.error("ai_request_failed", error=str(e))
+        except AIServiceError:
             raise
+        except Exception as exc:
+            mapped = self._map_provider_exception(exc)
+            logger.error(
+                "ai_request_failed",
+                request_id=request_id,
+                code=mapped.code,
+                status_code=mapped.status_code,
+                provider_status=mapped.provider_status,
+                retryable=mapped.retryable,
+                error=str(exc),
+            )
+            raise mapped
 
     async def analyze_conversation(
         self,
         conversation: ConversationData,
         context: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> tuple[list[Insight], int]:
         """Analyze conversation and return coach insights."""
 
@@ -110,10 +169,12 @@ class AIService:
 
         logger.info(
             "coach_analysis_started",
+            request_id=request_id,
             model=self.model,
             message_count=len(conversation.messages),
         )
 
+        started = time.perf_counter()
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -128,21 +189,40 @@ class AIService:
 
             content = response.choices[0].message.content
             if not content:
-                raise ValueError("Empty response from AI")
+                raise AIServiceError(
+                    "AI_PARSE_ERROR",
+                    "AI returned an empty response.",
+                    status_code=502,
+                    retryable=False,
+                )
 
-            analysis_data = json.loads(content)
+            analysis_data = self._extract_json_object(content)
 
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
             logger.info(
                 "coach_analysis_completed",
+                request_id=request_id,
+                latency_ms=elapsed_ms,
                 input_tokens=response.usage.prompt_tokens if response.usage else 0,
                 output_tokens=response.usage.completion_tokens if response.usage else 0,
             )
 
             return self._parse_insights(analysis_data)
 
-        except Exception as e:
-            logger.error("coach_analysis_failed", error=str(e))
+        except AIServiceError:
             raise
+        except Exception as exc:
+            mapped = self._map_provider_exception(exc)
+            logger.error(
+                "coach_analysis_failed",
+                request_id=request_id,
+                code=mapped.code,
+                status_code=mapped.status_code,
+                provider_status=mapped.provider_status,
+                retryable=mapped.retryable,
+                error=str(exc),
+            )
+            raise mapped
 
     def _build_system_prompt(
         self,
@@ -209,7 +289,7 @@ Respond with valid JSON matching this exact schema:
     {{
       "text": "The suggested message text (10-200 characters)",
       "rationale": "Brief explanation of why this approach works (20-150 characters)"
-    }},
+    }}
     // ... 3 suggestions total
   ]
 }}
@@ -301,26 +381,108 @@ Provide 2-4 actionable insights and an overall score."""
 
         return prompt
 
+    def _extract_json_object(self, content: str) -> dict:
+        """Extract a JSON object from an LLM response robustly."""
+
+        stripped = content.strip()
+        try:
+            payload = json.loads(stripped)
+            if isinstance(payload, dict):
+                return payload
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback: recover first JSON object in mixed text responses.
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start == -1 or end == -1 or start >= end:
+            raise AIServiceError(
+                "AI_PARSE_ERROR",
+                "AI response was not valid JSON.",
+                status_code=502,
+                retryable=False,
+            )
+
+        try:
+            payload = json.loads(stripped[start : end + 1])
+        except json.JSONDecodeError as exc:
+            raise AIServiceError(
+                "AI_PARSE_ERROR",
+                "AI response JSON could not be parsed.",
+                status_code=502,
+                retryable=False,
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise AIServiceError(
+                "AI_PARSE_ERROR",
+                "AI response JSON did not contain an object.",
+                status_code=502,
+                retryable=False,
+            )
+        return payload
+
     def _parse_suggestions(self, data: dict) -> list[Suggestion]:
         """Parse AI response into Suggestion models."""
 
-        suggestions = []
-        for i, item in enumerate(data.get("suggestions", [])[:3]):
+        raw_items = data.get("suggestions")
+        if not isinstance(raw_items, list):
+            raw_items = []
+
+        suggestions: list[Suggestion] = []
+        seen: set[str] = set()
+
+        for item in raw_items[:3]:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text", "")).strip()
+            rationale = str(item.get("rationale", "")).strip()
+            if not text:
+                continue
+
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+
             suggestions.append(
                 Suggestion(
                     id=f"sug_{uuid4().hex[:8]}",
-                    rank=i + 1,
-                    text=item.get("text", ""),
-                    rationale=item.get("rationale", ""),
-                    confidence_score=round(0.9 - (i * 0.05), 2),  # 0.90, 0.85, 0.80
+                    rank=len(suggestions) + 1,
+                    text=text[:200],
+                    rationale=(
+                        rationale[:150]
+                        if rationale
+                        else "Suggested from conversation context and communication goal."
+                    ),
+                    confidence_score=round(0.9 - (len(suggestions) * 0.05), 2),
                 )
             )
+
+        if len(suggestions) < 3:
+            for text, rationale in self._fallback_suggestion_templates():
+                if len(suggestions) >= 3:
+                    break
+                key = text.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                suggestions.append(
+                    Suggestion(
+                        id=f"sug_{uuid4().hex[:8]}",
+                        rank=len(suggestions) + 1,
+                        text=text,
+                        rationale=rationale,
+                        confidence_score=round(0.9 - (len(suggestions) * 0.05), 2),
+                    )
+                )
+
         return suggestions
 
     def _parse_insights(self, data: dict) -> tuple[list[Insight], int]:
         """Parse AI response into Insight models and score."""
 
-        insights = []
+        insights: list[Insight] = []
         for item in data.get("insights", [])[:4]:
             try:
                 insights.append(
@@ -336,6 +498,113 @@ Provide 2-4 actionable insights and an overall score."""
 
         overall_score = min(100, max(0, int(data.get("overall_score", 70))))
         return insights, overall_score
+
+    @staticmethod
+    def _fallback_suggestion_templates() -> list[tuple[str, str]]:
+        """Stable local templates used only when model output is malformed."""
+
+        return [
+            (
+                "That sounds good. Want to share a little more?",
+                "Keeps momentum by inviting a concrete follow-up.",
+            ),
+            (
+                "I like where this is going. What feels best for you next?",
+                "Signals interest while giving the other person space to respond.",
+            ),
+            (
+                "Thanks for sharing that. I am open to continuing this.",
+                "Comes across clear and respectful without overcommitting.",
+            ),
+        ]
+
+    @staticmethod
+    def _map_provider_exception(exc: Exception) -> AIServiceError:
+        """Translate provider SDK errors into stable API-facing error types."""
+
+        if isinstance(exc, APITimeoutError):
+            return AIServiceError(
+                "AI_TIMEOUT",
+                "AI provider timed out while generating suggestions.",
+                status_code=504,
+                retryable=True,
+            )
+
+        if isinstance(exc, APIConnectionError):
+            return AIServiceError(
+                "AI_TRANSPORT_ERROR",
+                "Unable to reach AI provider.",
+                status_code=502,
+                retryable=True,
+            )
+
+        if isinstance(exc, RateLimitError):
+            return AIServiceError(
+                "AI_RATE_LIMIT",
+                "AI provider rate limit reached. Please retry shortly.",
+                status_code=429,
+                retryable=False,
+                provider_status=429,
+            )
+
+        if isinstance(exc, AuthenticationError):
+            return AIServiceError(
+                "AI_AUTH_ERROR",
+                "AI provider authentication failed.",
+                status_code=502,
+                retryable=False,
+                provider_status=401,
+            )
+
+        if isinstance(exc, APIStatusError):
+            provider_status = exc.status_code or 500
+            if provider_status == 401:
+                return AIServiceError(
+                    "AI_AUTH_ERROR",
+                    "AI provider authentication failed.",
+                    status_code=502,
+                    retryable=False,
+                    provider_status=provider_status,
+                )
+            if provider_status == 402:
+                return AIServiceError(
+                    "AI_BILLING_ERROR",
+                    "AI provider billing/credits required.",
+                    status_code=502,
+                    retryable=False,
+                    provider_status=provider_status,
+                )
+            if provider_status == 429:
+                return AIServiceError(
+                    "AI_RATE_LIMIT",
+                    "AI provider rate limit reached. Please retry shortly.",
+                    status_code=429,
+                    retryable=False,
+                    provider_status=provider_status,
+                )
+            if provider_status >= 500:
+                return AIServiceError(
+                    "AI_UPSTREAM_ERROR",
+                    "AI provider returned an upstream error.",
+                    status_code=502,
+                    retryable=True,
+                    provider_status=provider_status,
+                )
+
+            return AIServiceError(
+                "AI_REQUEST_ERROR",
+                "AI provider rejected the request payload.",
+                status_code=502,
+                retryable=False,
+                provider_status=provider_status,
+            )
+
+        return AIServiceError(
+            "AI_ERROR",
+            "Unexpected AI provider error.",
+            status_code=502,
+            retryable=False,
+        )
 
 
 # Singleton instance

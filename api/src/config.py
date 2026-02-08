@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = True
     log_level: str = "INFO"
+    cors_allow_origins: str = "https://rizzmeow.com,https://www.rizzmeow.com"
 
     # Rate Limiting
     rate_limit_requests_per_minute: int = 10
@@ -65,6 +66,25 @@ class Settings(BaseSettings):
         if self.openai_api_key:
             return self.openai_base_url
         return self.xai_base_url
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Return normalized CORS origins with sane local dev defaults."""
+        configured = [
+            origin.strip()
+            for origin in self.cors_allow_origins.split(",")
+            if origin.strip()
+        ]
+        if self.debug:
+            configured.extend(
+                [
+                    "http://localhost:3000",
+                    "http://localhost:5173",
+                    "http://127.0.0.1:3000",
+                    "http://127.0.0.1:5173",
+                ]
+            )
+        return list(dict.fromkeys(configured))
 
 
 @lru_cache

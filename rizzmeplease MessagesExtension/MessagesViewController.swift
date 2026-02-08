@@ -139,7 +139,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
     @Published var workflowStage: ThreadWorkflowStage = .configure
     @Published var isCoachExpanded = false
     @Published var goal: ExtensionGoal = .getReply
-    @Published var uiMood: UIMood = .friendly
+    @Published var uiMood: UIMood = .smooth
     @Published var uiRelationship: UIRelationship = .friend
     @Published var extraContext = ""
     @Published var transcriptInput = ""
@@ -287,20 +287,27 @@ private final class ThreadSuggestionViewModel: ObservableObject {
 
     func loadMockTranscript() {
         switch uiRelationship {
-        case .friend, .family:
+        case .friend:
             transcriptInput = """
             Them: You still down for dinner tonight?
             You: Yeah, maybe 20 minutes late.
             Them: No stress. Want me to order for you?
             """
             extraContext = "I want to sound considerate without overexplaining."
-        case .colleague, .boss:
+        case .work:
             transcriptInput = """
             Them: Can you send the revised deck today?
             You: I can send an updated version this afternoon.
             Them: Great, what time should I expect it?
             """
             extraContext = "Clear and professional tone."
+        case .crush, .dating:
+            transcriptInput = """
+            Them: Hey! Are you free this weekend?
+            You: Let me check...
+            Them: We should do something fun.
+            """
+            extraContext = "Keep it playful, confident, and not too long."
         }
     }
 
@@ -611,698 +618,403 @@ private struct ThreadSuggestionRootView: View {
     @ObservedObject var viewModel: ThreadSuggestionViewModel
     let onInsertDraft: (ExtensionSuggestion) -> Void
     let onExpand: () -> Void
-
-    private var goalBinding: Binding<ExtensionGoal> {
-        Binding(
-            get: { viewModel.goal },
-            set: { viewModel.dispatch(.updateGoal($0)) }
-        )
-    }
+    @State private var selectedTab: RizzSectionTab = .generate
 
     private var moodBinding: Binding<UIMood> {
-        Binding(
-            get: { viewModel.uiMood },
-            set: { viewModel.dispatch(.updateMood($0)) }
-        )
+        Binding(get: { viewModel.uiMood }, set: { viewModel.dispatch(.updateMood($0)) })
     }
 
     private var relationshipBinding: Binding<UIRelationship> {
-        Binding(
-            get: { viewModel.uiRelationship },
-            set: { viewModel.dispatch(.updateRelationship($0)) }
-        )
-    }
-
-    private var mockModeBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.isMockModeEnabled },
-            set: { viewModel.dispatch(.toggleMockMode($0)) }
-        )
-    }
-
-    private var outcomeBinding: Binding<ExtensionFeedbackOutcome> {
-        Binding(
-            get: { viewModel.selectedOutcome },
-            set: { viewModel.dispatch(.updateOutcome($0)) }
-        )
-    }
-
-    private var notesBinding: Binding<String> {
-        Binding(
-            get: { viewModel.feedbackNotes },
-            set: { viewModel.dispatch(.updateFeedbackNotes($0)) }
-        )
+        Binding(get: { viewModel.uiRelationship }, set: { viewModel.dispatch(.updateRelationship($0)) })
     }
 
     private var extraContextBinding: Binding<String> {
-        Binding(
-            get: { viewModel.extraContext },
-            set: { viewModel.dispatch(.updateExtraContext($0)) }
-        )
+        Binding(get: { viewModel.extraContext }, set: { viewModel.dispatch(.updateExtraContext($0)) })
     }
 
     private var transcriptBinding: Binding<String> {
-        Binding(
-            get: { viewModel.transcriptInput },
-            set: { viewModel.dispatch(.updateTranscript($0)) }
-        )
+        Binding(get: { viewModel.transcriptInput }, set: { viewModel.dispatch(.updateTranscript($0)) })
     }
 
     var body: some View {
         ZStack {
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
-
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 12) {
-                    headerLayer
-
-                    if viewModel.isCoachExpanded {
-                        VStack(alignment: .leading, spacing: 12) {
-                            workflowLayer
-                            modeLayer
-                            goalLayer
-                            moodLayer
-                            relationshipLayer
-                            composerLayer
-                            suggestionsLayer
-
-                            if viewModel.selectedSuggestionId != nil {
-                                feedbackLayer
-                                    .transition(
-                                        .asymmetric(
-                                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                                            removal: .opacity
-                                        )
-                                    )
-                            }
-
-                            #if DEBUG
-                            if !viewModel.recentEvents.isEmpty {
-                                eventLayer
-                            }
-                            #endif
-                        }
-                        .transition(
-                            .asymmetric(
-                                insertion: .move(edge: .top).combined(with: .opacity),
-                                removal: .opacity
-                            )
-                        )
-                    }
+            Color(.systemGray6).ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    topHeader
+                    tabsRow
+                    bodyContent
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             }
-        }
-        .animation(.spring(response: 0.34, dampingFraction: 0.85), value: viewModel.isCoachExpanded)
-        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: viewModel.workflowStage)
-    }
-
-    private func setCoachExpanded(_ expanded: Bool) {
-        viewModel.dispatch(.toggleCoachExpanded(expanded))
-        if expanded && viewModel.presentationStyle == .compact {
-            onExpand()
+            .padding(.horizontal, 6)
         }
     }
 
-    private var headerLayer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Text Coach")
-                        .font(.system(.title3, design: .rounded, weight: .semibold))
-                    Text("iMessage only shares limited thread context. Paste recent lines for better quality.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+    private var topHeader: some View {
+        HStack {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.white)
+                .font(.title3.weight(.semibold))
+            Spacer()
+            Text("RizzHelper")
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.5)
+            Spacer()
+            HStack(spacing: 6) {
+                Image(systemName: "moonphase.first.quarter")
+                    .font(.callout)
+                Text("25")
+                    .font(.headline.weight(.semibold))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.18))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(red: 0.00, green: 0.75, blue: 0.56))
+    }
 
-                Spacer(minLength: 6)
-
+    private var tabsRow: some View {
+        HStack(spacing: 8) {
+            ForEach(RizzSectionTab.allCases, id: \.self) { tab in
                 Button {
-                    setCoachExpanded(!viewModel.isCoachExpanded)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(viewModel.isCoachExpanded ? "Collapse" : "Expand")
-                            .font(.subheadline.weight(.semibold))
-                        Image(systemName: viewModel.isCoachExpanded ? "chevron.down" : "chevron.up")
-                            .font(.caption.weight(.bold))
+                    selectedTab = tab
+                    if tab == .generate && viewModel.presentationStyle == .compact {
+                        onExpand()
                     }
-                    .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(tab.icon)
+                        Text(tab.title)
+                            .font(.headline.weight(.semibold))
+                    }
+                    .foregroundStyle(selectedTab == tab ? .white : Color(.darkText))
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(
-                        Capsule()
-                            .fill(Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.12))
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(selectedTab == tab ? Color(red: 0.00, green: 0.75, blue: 0.56) : .white)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.black.opacity(0.14), lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(viewModel.isCoachExpanded ? "Collapse text coach panel" : "Expand text coach panel")
-                .accessibilityHint("Shows or hides the advanced drafting controls")
-            }
-
-            if let status = statusMessage {
-                Text(status.text)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(status.color)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(status.color.opacity(0.12))
-                    .clipShape(Capsule(style: .continuous))
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.systemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+        .padding(10)
+        .background(.white)
     }
 
-    private var statusMessage: (text: String, color: Color)? {
-        if let error = viewModel.errorMessage, !error.isEmpty {
-            return (error, .red)
-        }
-        if viewModel.usedFallback {
-            return ("Live API unavailable. Showing local fallback drafts.", .orange)
-        }
-        if let feedback = viewModel.feedbackStatusMessage, !feedback.isEmpty {
-            return (feedback, .secondary)
-        }
-        return nil
-    }
-
-    private var workflowLayer: some View {
-        DynamicLayerCard(
-            title: "Workflow",
-            subtitle: viewModel.workflowHint
-        ) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(ThreadWorkflowStage.allCases, id: \.self) { stage in
-                        let isCurrent = stage == viewModel.workflowStage
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(isCurrent ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color.secondary.opacity(0.25))
-                                .frame(width: 8, height: 8)
-                            Text(stage.title)
-                                .font(.caption.weight(isCurrent ? .semibold : .regular))
-                        }
-                        .foregroundStyle(isCurrent ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    isCurrent
-                                    ? Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.14)
-                                    : Color.secondary.opacity(0.10)
-                                )
-                        )
-                    }
-                }
+    @ViewBuilder
+    private var bodyContent: some View {
+        switch selectedTab {
+        case .generate:
+            generateContent
+        case .history:
+            placeholderCard(
+                title: "History",
+                body: "Generate and insert drafts to populate your in-thread history."
+            )
+        case .tips:
+            VStack(spacing: 10) {
+                tipCard(color: Color(red: 0.97, green: 0.79, blue: 0.14), icon: "💡", title: "Add Context", body: "The more info you give, the better the replies.")
+                tipCard(color: Color(red: 0.30, green: 0.80, blue: 0.76), icon: "✨", title: "Match the Vibe", body: "Choose a vibe that fits your relationship.")
+                tipCard(color: Color(red: 0.96, green: 0.45, blue: 0.69), icon: "🎯", title: "Be Authentic", body: "Edit drafts so they sound like you.")
             }
-
-            if let inserted = viewModel.lastInsertedDraft {
-                Text("Inserted draft: \(inserted)")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-                    .lineLimit(2)
-            }
+            .padding(14)
         }
     }
 
-    private var modeLayer: some View {
-        DynamicLayerCard(
-            title: "Mode",
-            subtitle: "Switch between local and live behavior"
-        ) {
-            Toggle(isOn: mockModeBinding) {
-                Text("Local Mock Mode")
-                    .font(.subheadline)
-            }
-            .tint(Color(red: 0.20, green: 0.78, blue: 0.35))
-            .accessibilityLabel("Local mock mode")
-
-            Button("Load Sample Transcript ◇") {
-                viewModel.dispatch(.loadSampleTranscript)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
-            .buttonStyle(.plain)
-            .frame(minHeight: 44, alignment: .leading)
-            .accessibilityLabel("Load sample transcript")
-
-            if !viewModel.selectedMessageSummary.isEmpty {
-                Text("Selected context: \(viewModel.selectedMessageSummary)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-        }
-    }
-
-    private var goalLayer: some View {
-        DynamicLayerCard(
-            title: "Goal",
-            subtitle: "Pick your drafting objective"
-        ) {
-            HStack(spacing: 8) {
-                ForEach(ExtensionGoal.allCases) { goal in
-                    SelectionChip(
-                        title: goal.title,
-                        subtitle: nil,
-                        emoji: nil,
-                        isSelected: goalBinding.wrappedValue == goal,
-                        minHeight: 44
-                    ) {
-                        goalBinding.wrappedValue = goal
-                    }
-                }
-            }
-        }
-    }
-
-    private var moodLayer: some View {
-        DynamicLayerCard(
-            title: "Mood",
-            subtitle: "Guide style and energy"
-        ) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+    private var generateContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            sectionTitle("CHOOSE YOUR VIBE")
+            LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 10) {
                 ForEach(UIMood.allCases) { mood in
-                    SelectionChip(
-                        title: mood.title,
-                        subtitle: nil,
-                        emoji: mood.emoji,
-                        isSelected: moodBinding.wrappedValue == mood,
-                        minHeight: 50
-                    ) {
-                        moodBinding.wrappedValue = mood
-                    }
-                    .accessibilityLabel("\(mood.title) mood")
+                    vibeTile(mood: mood, selected: mood == moodBinding.wrappedValue)
                 }
             }
-        }
-    }
 
-    private var relationshipLayer: some View {
-        DynamicLayerCard(
-            title: "Relationship",
-            subtitle: "Tune language to the person"
-        ) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+            sectionTitle("WHO ARE THEY?")
+            HStack(spacing: 8) {
                 ForEach(UIRelationship.allCases) { relationship in
-                    SelectionChip(
-                        title: relationship.title,
-                        subtitle: nil,
-                        emoji: relationship.emoji,
-                        isSelected: relationshipBinding.wrappedValue == relationship,
-                        minHeight: 50
-                    ) {
+                    Button {
                         relationshipBinding.wrappedValue = relationship
-                    }
-                    .accessibilityLabel("\(relationship.title) relationship")
-                }
-            }
-        }
-    }
-
-    private var composerLayer: some View {
-        DynamicLayerCard(
-            title: "Composer",
-            subtitle: "Context and transcript"
-        ) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Extra Context")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("Anything important to include?", text: extraContextBinding)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 11)
-                    .background(
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .fill(Color(.systemGray6))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
-                    )
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Transcript (Them:/You:)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Them:")
-                        .font(.subheadline.weight(.medium))
-                    Text("You:")
-                        .font(.subheadline.weight(.medium))
-
-                    TextEditor(text: transcriptBinding)
-                        .frame(minHeight: 100)
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(Color(.systemGray6))
-                        )
+                    } label: {
+                        VStack(spacing: 6) {
+                            Text(relationship.emoji)
+                                .font(.headline)
+                            Text(relationship.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.black.opacity(0.75))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 72)
+                        .background(.white)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(relationshipBinding.wrappedValue == relationship ? Color(red: 0.00, green: 0.75, blue: 0.56) : Color.black.opacity(0.16), lineWidth: relationshipBinding.wrappedValue == relationship ? 2 : 1)
                         )
+                        .scaleEffect(relationshipBinding.wrappedValue == relationship ? 1.04 : 1.0)
+                    }
+                    .buttonStyle(.plain)
                 }
+            }
+
+            fieldSection(title: "EXTRA CONTEXT") {
+                TextField("They love hiking, dogs, etc...", text: extraContextBinding)
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(.white)
+                    .overlay(Rectangle().stroke(Color.black.opacity(0.14), lineWidth: 1))
+            }
+
+            fieldSection(title: "RECENT MESSAGES") {
+                TextEditor(text: transcriptBinding)
+                    .frame(minHeight: 120)
+                    .padding(8)
+                    .background(.white)
+                    .overlay(Rectangle().stroke(Color.black.opacity(0.14), lineWidth: 1))
+            }
+
+            if let error = viewModel.errorMessage, !error.isEmpty {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
 
             Button {
                 viewModel.dispatch(.generateTapped)
             } label: {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .tint(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 46)
-                } else {
-                    Text("Generate Drafts")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 46)
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.stars")
+                    Text(viewModel.isLoading ? "Generating..." : "Generate Replies")
+                        .font(.title3.weight(.bold))
                 }
+                .foregroundStyle(Color.black.opacity(0.55))
+                .frame(maxWidth: .infinity, minHeight: 66)
+                .background(
+                    Rectangle().fill(viewModel.canGenerate ? Color(red: 0.00, green: 0.75, blue: 0.56).opacity(0.25) : Color.gray.opacity(0.28))
+                )
+                .overlay(Rectangle().stroke(Color.black.opacity(0.14), lineWidth: 1))
             }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(viewModel.canGenerate ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color(.systemGray3))
-            )
             .buttonStyle(.plain)
             .disabled(!viewModel.canGenerate)
-            .accessibilityLabel("Generate drafts")
-        }
-    }
 
-    private var suggestionsLayer: some View {
-        DynamicLayerCard(
-            title: "Suggestions",
-            subtitle: "Tap insert to place draft into compose box"
-        ) {
-            if viewModel.isLoading {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Generating drafts...")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if viewModel.suggestions.isEmpty {
-                Text("No drafts yet. Generate to populate suggestions.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(viewModel.suggestions) { suggestion in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("#\(suggestion.rank)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.12))
-                                .clipShape(Capsule(style: .continuous))
-                            Spacer(minLength: 4)
-                            if let confidence = suggestion.confidenceScore {
-                                Text("\(Int(confidence * 100))%")
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(.secondary)
+            if !viewModel.suggestions.isEmpty {
+                sectionTitle("SUGGESTED REPLIES")
+                VStack(spacing: 10) {
+                    ForEach(viewModel.suggestions) { suggestion in
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(suggestion.text)
+                                .font(.body)
+                            Button("Insert Draft") {
+                                onInsertDraft(suggestion)
                             }
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
                         }
-
-                        Text(suggestion.text)
-                            .font(.body)
-
-                        Text(suggestion.rationale)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Button("Insert Draft") {
-                            onInsertDraft(suggestion)
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color(red: 0.00, green: 0.48, blue: 1.00))
-                        .buttonStyle(.plain)
-                        .frame(minHeight: 44, alignment: .leading)
-                        .accessibilityLabel("Insert draft number \(suggestion.rank)")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(.white)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.black.opacity(0.12), lineWidth: 1)
+                        )
                     }
-                    .padding(10)
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.black.opacity(0.05), lineWidth: 1)
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
+        .padding(14)
     }
 
-    private var feedbackLayer: some View {
-        DynamicLayerCard(
-            title: "Feedback",
-            subtitle: "Tell us how the inserted draft performed"
-        ) {
-            Picker("Outcome", selection: outcomeBinding) {
-                ForEach(ExtensionFeedbackOutcome.allCases) { outcome in
-                    Text(outcome.title).tag(outcome)
-                }
+    private func vibeTile(mood: UIMood, selected: Bool) -> some View {
+        Button {
+            moodBinding.wrappedValue = mood
+        } label: {
+            HStack(spacing: 8) {
+                Text(mood.emoji)
+                    .font(.title3)
+                Text(mood.title)
+                    .font(.title3.weight(.bold))
+                Spacer(minLength: 0)
             }
-            .pickerStyle(.segmented)
-
-            TextField("Optional feedback notes", text: notesBinding)
-                .textFieldStyle(.roundedBorder)
-
-            Button {
-                viewModel.dispatch(.submitFeedbackTapped)
-            } label: {
-                if viewModel.isSubmittingFeedback {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 44)
-                } else {
-                    Text("Submit Feedback")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .frame(height: 72)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(viewModel.canSubmitFeedback ? Color(red: 0.00, green: 0.48, blue: 1.00) : Color(.systemGray3))
-            )
-            .buttonStyle(.plain)
-            .disabled(!viewModel.canSubmitFeedback)
-            .accessibilityLabel("Submit feedback")
-
-            if let feedbackMessage = viewModel.feedbackStatusMessage {
-                Text(feedbackMessage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if viewModel.isMockModeEnabled && !viewModel.mockFeedbackEvents.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Mock Feedback Log")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach(Array(viewModel.mockFeedbackEvents.prefix(3))) { event in
-                        Text("\(event.outcome.title): \(event.suggestionId) at \(event.createdAt.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-    }
-
-    private var eventLayer: some View {
-        DynamicLayerCard(
-            title: "Event Stream",
-            subtitle: "Recent UI events"
-        ) {
-            ForEach(viewModel.recentEvents.prefix(6), id: \.self) { event in
-                Text(event)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-}
-
-private struct DynamicLayerCard<Content: View>: View {
-    let title: String
-    let subtitle: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline.weight(.semibold))
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            content
-        }
-        .padding(13)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.black.opacity(0.06), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 3)
-    }
-}
-
-private struct SelectionChip: View {
-    let title: String
-    let subtitle: String?
-    let emoji: String?
-    let isSelected: Bool
-    let minHeight: CGFloat
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .center, spacing: subtitle == nil ? 0 : 2) {
-                HStack(spacing: 4) {
-                    if let emoji {
-                        Text(emoji)
-                    }
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                }
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption2)
-                        .lineLimit(1)
-                }
-            }
-            .foregroundStyle(
-                isSelected
-                ? Color(red: 0.00, green: 0.48, blue: 1.00)
-                : .primary
-            )
-            .frame(maxWidth: .infinity, minHeight: minHeight)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(
-                        isSelected
-                        ? Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.14)
-                        : Color(.systemGray6)
-                    )
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(mood.fillColor)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(
-                        isSelected
-                        ? Color(red: 0.00, green: 0.48, blue: 1.00).opacity(0.45)
-                        : Color.black.opacity(0.06),
-                        lineWidth: 1
-                    )
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(selected ? Color.black.opacity(0.35) : Color.clear, lineWidth: 2)
             )
+            .scaleEffect(selected ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
-        .contentShape(Rectangle())
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.heavy))
+            .foregroundStyle(Color.black.opacity(0.68))
+    }
+
+    private func fieldSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionTitle(title)
+            content()
+        }
+    }
+
+    private func placeholderCard(title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.title3.weight(.bold))
+            Text(body)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+    }
+
+    private func tipCard(color: Color, icon: String, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(icon)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title3.weight(.bold))
+                Text(body)
+                    .font(.subheadline)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(color)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private enum RizzSectionTab: CaseIterable {
+    case generate
+    case history
+    case tips
+
+    var title: String {
+        switch self {
+        case .generate: return "Generate"
+        case .history: return "History"
+        case .tips: return "Tips"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .generate: return "✨"
+        case .history: return "💬"
+        case .tips: return "💡"
+        }
     }
 }
 
 // MARK: - API Models
 
 private enum UIMood: String, CaseIterable, Identifiable {
-    case friendly
-    case professional
-    case casual
-    case excited
-    case empathetic
-    case formal
+    case flirty
+    case smooth
+    case bold
+    case classy
+    case funny
+    case chill
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .friendly: return "Friendly"
-        case .professional: return "Professional"
-        case .casual: return "Casual"
-        case .excited: return "Excited"
-        case .empathetic: return "Empathetic"
-        case .formal: return "Formal"
+        case .flirty: return "Flirty"
+        case .smooth: return "Smooth"
+        case .bold: return "Bold"
+        case .classy: return "Classy"
+        case .funny: return "Funny"
+        case .chill: return "Chill"
         }
     }
 
     var emoji: String {
         switch self {
-        case .friendly: return "😊"
-        case .professional: return "💼"
-        case .casual: return "😎"
-        case .excited: return "🎉"
-        case .empathetic: return "💙"
-        case .formal: return "🤝"
+        case .flirty: return "😉"
+        case .smooth: return "😎"
+        case .bold: return "🔥"
+        case .classy: return "💎"
+        case .funny: return "😂"
+        case .chill: return "🧊"
+        }
+    }
+
+    var fillColor: Color {
+        switch self {
+        case .flirty: return Color(red: 0.95, green: 0.40, blue: 0.62)
+        case .smooth: return Color(red: 0.33, green: 0.78, blue: 0.75)
+        case .bold: return Color(red: 1.00, green: 0.44, blue: 0.38)
+        case .classy: return Color(red: 0.62, green: 0.36, blue: 0.82)
+        case .funny: return Color(red: 0.97, green: 0.80, blue: 0.10)
+        case .chill: return Color(red: 0.45, green: 0.69, blue: 0.94)
         }
     }
 
     var backendTone: ExtensionTone {
         switch self {
-        case .friendly: return .friendly
-        case .professional: return .direct
-        case .casual: return .friendly
-        case .excited: return .confident
-        case .empathetic: return .warm
-        case .formal: return .direct
+        case .flirty: return .warm
+        case .smooth: return .friendly
+        case .bold: return .confident
+        case .classy: return .direct
+        case .funny: return .friendly
+        case .chill: return .warm
         }
     }
 }
 
 private enum UIRelationship: String, CaseIterable, Identifiable {
+    case crush
     case friend
-    case colleague
-    case family
-    case boss
+    case work
+    case dating
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .crush: return "Crush"
         case .friend: return "Friend"
-        case .colleague: return "Colleague"
-        case .family: return "Family"
-        case .boss: return "Boss"
+        case .work: return "Work"
+        case .dating: return "Dating"
         }
     }
 
     var emoji: String {
         switch self {
+        case .crush: return "💘"
         case .friend: return "👥"
-        case .colleague: return "💼"
-        case .family: return "👨‍👩‍👧"
-        case .boss: return "👔"
+        case .work: return "💼"
+        case .dating: return "❤️"
         }
     }
 
     var backendRelationship: ExtensionRelationshipType {
         switch self {
+        case .crush: return .dating
         case .friend: return .friend
-        case .colleague: return .professional
-        case .family: return .friend
-        case .boss: return .professional
+        case .work: return .professional
+        case .dating: return .dating
         }
     }
 }
