@@ -8,6 +8,7 @@
 import UIKit
 import Messages
 import SwiftUI
+import Combine
 
 class MessagesViewController: MSMessagesAppViewController {
     private let viewModel = ThreadSuggestionViewModel()
@@ -29,12 +30,12 @@ class MessagesViewController: MSMessagesAppViewController {
 
     override func willTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
         super.willTransition(to: presentationStyle)
-        viewModel.presentationStyle = presentationStyle
+        viewModel.dispatch(.updatePresentationStyle(presentationStyle))
     }
 
     override func didTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
         super.didTransition(to: presentationStyle)
-        viewModel.presentationStyle = presentationStyle
+        viewModel.dispatch(.updatePresentationStyle(presentationStyle))
     }
 
     private func installRootView() {
@@ -63,7 +64,7 @@ class MessagesViewController: MSMessagesAppViewController {
     }
 
     private func insertSuggestion(_ suggestion: ExtensionSuggestion) {
-        viewModel.registerInsertedSuggestion(id: suggestion.id)
+        viewModel.dispatch(.suggestionInserted(suggestion))
         insertDraft(suggestion.text)
     }
 
@@ -74,23 +75,67 @@ class MessagesViewController: MSMessagesAppViewController {
         }
 
         conversation.insertText(draft) { [weak self] error in
+            guard let self else { return }
             Task { @MainActor in
-                if let error {
-                    self?.viewModel.errorMessage = "Insert failed: \(error.localizedDescription)"
-                } else {
-                    self?.viewModel.lastInsertedDraft = draft
-                }
+                self.applyInsertResult(draft: draft, error: error)
             }
+        }
+    }
+
+    @MainActor
+    private func applyInsertResult(draft: String, error: Error?) {
+        if let error {
+            viewModel.errorMessage = "Insert failed: \(error.localizedDescription)"
+        } else {
+            viewModel.lastInsertedDraft = draft
         }
     }
 }
 
 // MARK: - View Model
 
+private enum ThreadWorkflowStage: String, CaseIterable {
+    case configure
+    case generating
+    case reviewing
+    case inserted
+    case submittingFeedback
+    case complete
+
+    var title: String {
+        switch self {
+        case .configure: return "Configure"
+        case .generating: return "Generating"
+        case .reviewing: return "Review"
+        case .inserted: return "Inserted"
+        case .submittingFeedback: return "Submitting Feedback"
+        case .complete: return "Complete"
+        }
+    }
+}
+
+private enum ThreadSuggestionEvent {
+    case toggleMockMode(Bool)
+    case loadSampleTranscript
+    case updateGoal(ExtensionGoal)
+    case updateTone(ExtensionTone)
+    case updateRelationship(ExtensionRelationshipType)
+    case updateExtraContext(String)
+    case updateTranscript(String)
+    case generateTapped
+    case suggestionInserted(ExtensionSuggestion)
+    case updateOutcome(ExtensionFeedbackOutcome)
+    case updateFeedbackNotes(String)
+    case submitFeedbackTapped
+    case clearTransientMessages
+    case updatePresentationStyle(MSMessagesAppPresentationStyle)
+}
+
 @MainActor
 private final class ThreadSuggestionViewModel: ObservableObject {
     private static let mockModeKey = "messages_extension_mock_mode_enabled"
 
+    @Published var workflowStage: ThreadWorkflowStage = .configure
     @Published var goal: ExtensionGoal = .getReply
     @Published var tone: ExtensionTone = .friendly
     @Published var relationshipType: ExtensionRelationshipType = .friend
@@ -111,6 +156,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
     @Published var mockFeedbackEvents: [MockFeedbackEvent] = []
     @Published var selectedMessageSummary = ""
     @Published var presentationStyle: MSMessagesAppPresentationStyle = .compact
+    @Published var recentEvents: [String] = []
 
     private let apiService = ThreadSuggestionService()
 
@@ -122,8 +168,97 @@ private final class ThreadSuggestionViewModel: ObservableObject {
         selectedSuggestionId != nil && selectedSuggestionSetId != nil && !isSubmittingFeedback
     }
 
+    var workflowHint: String {
+        switch workflowStage {
+        case .configure:
+            return "Set intent and context, then generate drafts."
+        case .generating:
+            return "Building suggestions from your thread context."
+        case .reviewing:
+            return "Pick the best draft and insert it into Messages."
+        case .inserted:
+            return "Draft inserted. You can now log outcome feedback."
+        case .submittingFeedback:
+            return "Saving feedback."
+        case .complete:
+            return "Feedback saved. Generate again when ready."
+        }
+    }
+
+    func dispatch(_ event: ThreadSuggestionEvent) {
+        switch event {
+        case .toggleMockMode(let enabled):
+            setMockMode(enabled)
+            workflowStage = .configure
+            recordEvent(enabled ? "mock_mode_enabled" : "mock_mode_disabled")
+
+        case .loadSampleTranscript:
+            loadMockTranscript()
+            workflowStage = .configure
+            recordEvent("sample_loaded")
+
+        case .updateGoal(let goal):
+            self.goal = goal
+            workflowStage = .configure
+            recordEvent("goal_\(goal.rawValue)")
+
+        case .updateTone(let tone):
+            self.tone = tone
+            workflowStage = .configure
+            recordEvent("tone_\(tone.rawValue)")
+
+        case .updateRelationship(let relationship):
+            relationshipType = relationship
+            workflowStage = .configure
+            recordEvent("relationship_\(relationship.rawValue)")
+
+        case .updateExtraContext(let context):
+            extraContext = context
+
+        case .updateTranscript(let transcript):
+            transcriptInput = transcript
+
+        case .generateTapped:
+            workflowStage = .generating
+            clearTransientMessages()
+            recordEvent("generate_tapped")
+            Task { [weak self] in
+                await self?.generateSuggestions()
+            }
+
+        case .suggestionInserted(let suggestion):
+            registerInsertedSuggestion(id: suggestion.id)
+            workflowStage = .inserted
+            recordEvent("inserted_\(suggestion.id)")
+
+        case .updateOutcome(let outcome):
+            selectedOutcome = outcome
+            workflowStage = .inserted
+
+        case .updateFeedbackNotes(let notes):
+            feedbackNotes = notes
+
+        case .submitFeedbackTapped:
+            guard canSubmitFeedback else {
+                feedbackStatusMessage = "Insert one suggestion before submitting feedback."
+                return
+            }
+            workflowStage = .submittingFeedback
+            recordEvent("submit_feedback_tapped")
+            Task { [weak self] in
+                await self?.submitFeedback()
+            }
+
+        case .clearTransientMessages:
+            clearTransientMessages()
+
+        case .updatePresentationStyle(let style):
+            presentationStyle = style
+        }
+    }
+
     func refreshConversation(_ conversation: MSConversation, style: MSMessagesAppPresentationStyle) {
-        presentationStyle = style
+        dispatch(.updatePresentationStyle(style))
         selectedMessageSummary = Self.extractSelectedMessageSummary(from: conversation)
 
         if transcriptInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -206,6 +341,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
             )
             feedbackStatusMessage = "Saved feedback locally (mock mode)."
             feedbackNotes = ""
+            workflowStage = .complete
             return
         }
 
@@ -224,8 +360,10 @@ private final class ThreadSuggestionViewModel: ObservableObject {
             _ = try await apiService.submitFeedback(request: request)
             feedbackStatusMessage = "Feedback submitted successfully."
             feedbackNotes = ""
+            workflowStage = .complete
         } catch {
             feedbackStatusMessage = "Feedback failed: \(error.localizedDescription)"
+            workflowStage = .inserted
         }
     }
 
@@ -247,6 +385,7 @@ private final class ThreadSuggestionViewModel: ObservableObject {
             suggestions = mockResult.suggestions
             selectedSuggestionSetId = mockResult.suggestionSetId
             usedFallback = false
+            workflowStage = .reviewing
             return
         }
 
@@ -267,12 +406,27 @@ private final class ThreadSuggestionViewModel: ObservableObject {
             suggestions = result.suggestions.sorted { $0.rank < $1.rank }
             selectedSuggestionSetId = result.suggestionSetId
             usedFallback = false
+            workflowStage = .reviewing
         } catch {
             let fallback = mockSuggestionResult(modePrefix: "fallback")
             suggestions = fallback.suggestions
             selectedSuggestionSetId = fallback.suggestionSetId
             usedFallback = true
             errorMessage = "Live API unavailable. Showing local drafts."
+            workflowStage = .reviewing
+        }
+    }
+
+    private func clearTransientMessages() {
+        errorMessage = nil
+        feedbackStatusMessage = nil
+    }
+
+    private func recordEvent(_ value: String) {
+        let timestamp = Date().formatted(date: .omitted, time: .standard)
+        recentEvents.insert("\(timestamp): \(value)", at: 0)
+        if recentEvents.count > 8 {
+            recentEvents.removeLast(recentEvents.count - 8)
         }
     }
 
@@ -465,184 +619,77 @@ private struct ThreadSuggestionRootView: View {
     let onInsertDraft: (ExtensionSuggestion) -> Void
     let onExpand: () -> Void
 
+    private var goalBinding: Binding<ExtensionGoal> {
+        Binding(
+            get: { viewModel.goal },
+            set: { viewModel.dispatch(.updateGoal($0)) }
+        )
+    }
+
+    private var toneBinding: Binding<ExtensionTone> {
+        Binding(
+            get: { viewModel.tone },
+            set: { viewModel.dispatch(.updateTone($0)) }
+        )
+    }
+
+    private var relationshipBinding: Binding<ExtensionRelationshipType> {
+        Binding(
+            get: { viewModel.relationshipType },
+            set: { viewModel.dispatch(.updateRelationship($0)) }
+        )
+    }
+
+    private var mockModeBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isMockModeEnabled },
+            set: { viewModel.dispatch(.toggleMockMode($0)) }
+        )
+    }
+
+    private var outcomeBinding: Binding<ExtensionFeedbackOutcome> {
+        Binding(
+            get: { viewModel.selectedOutcome },
+            set: { viewModel.dispatch(.updateOutcome($0)) }
+        )
+    }
+
+    private var notesBinding: Binding<String> {
+        Binding(
+            get: { viewModel.feedbackNotes },
+            set: { viewModel.dispatch(.updateFeedbackNotes($0)) }
+        )
+    }
+
+    private var extraContextBinding: Binding<String> {
+        Binding(
+            get: { viewModel.extraContext },
+            set: { viewModel.dispatch(.updateExtraContext($0)) }
+        )
+    }
+
+    private var transcriptBinding: Binding<String> {
+        Binding(
+            get: { viewModel.transcriptInput },
+            set: { viewModel.dispatch(.updateTranscript($0)) }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if viewModel.presentationStyle == .compact {
-                        Button("Open Full Composer") {
-                            onExpand()
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-
-                    Text("iMessage only shares limited thread context. Paste recent lines for better quality.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Toggle(
-                        "Local Mock Mode",
-                        isOn: Binding(
-                            get: { viewModel.isMockModeEnabled },
-                            set: { viewModel.setMockMode($0) }
-                        )
-                    )
-
-                    Button("Load Sample Transcript") {
-                        viewModel.loadMockTranscript()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Picker("Goal", selection: $viewModel.goal) {
-                        ForEach(ExtensionGoal.allCases) { goal in
-                            Text(goal.title).tag(goal)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    Picker("Tone", selection: $viewModel.tone) {
-                        ForEach(ExtensionTone.allCases) { tone in
-                            Text(tone.title).tag(tone)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    Picker("Relationship", selection: $viewModel.relationshipType) {
-                        ForEach(ExtensionRelationshipType.allCases) { relationship in
-                            Text(relationship.title).tag(relationship)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Extra Context")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextField("Anything important to include?", text: $viewModel.extraContext)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Transcript (Them:/You:)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextEditor(text: $viewModel.transcriptInput)
-                            .frame(minHeight: 120)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                            )
-                    }
-
-                    if !viewModel.selectedMessageSummary.isEmpty {
-                        Text("Selected thread context: \(viewModel.selectedMessageSummary)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Button {
-                        Task {
-                            await viewModel.generateSuggestions()
-                        }
-                    } label: {
-                        if viewModel.isLoading && !viewModel.isMockModeEnabled {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Text("Generate Drafts")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!viewModel.canGenerate)
-
-                    if viewModel.usedFallback {
-                        Text("Using local fallback suggestions.")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-
-                    if let errorMessage = viewModel.errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-
-                    if let inserted = viewModel.lastInsertedDraft {
-                        Text("Inserted draft: \(inserted)")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    }
-
-                    ForEach(viewModel.suggestions) { suggestion in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(suggestion.text)
-                                .font(.body)
-                            Text(suggestion.rationale)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Button("Insert Draft") {
-                                onInsertDraft(suggestion)
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .padding(10)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
+                VStack(alignment: .leading, spacing: 14) {
+                    workflowLayer
+                    contextLayer
+                    composerLayer
+                    suggestionsLayer
 
                     if viewModel.selectedSuggestionId != nil {
-                        Divider()
-                        Text("Suggestion Feedback")
-                            .font(.headline)
-
-                        Picker("Outcome", selection: $viewModel.selectedOutcome) {
-                            ForEach(ExtensionFeedbackOutcome.allCases) { outcome in
-                                Text(outcome.title).tag(outcome)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        TextField("Optional feedback notes", text: $viewModel.feedbackNotes)
-                            .textFieldStyle(.roundedBorder)
-
-                        Button {
-                            Task {
-                                await viewModel.submitFeedback()
-                            }
-                        } label: {
-                            if viewModel.isSubmittingFeedback {
-                                ProgressView()
-                                    .frame(maxWidth: .infinity)
-                            } else {
-                                Text("Submit Feedback")
-                                    .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!viewModel.canSubmitFeedback)
+                        feedbackLayer
                     }
 
-                    if let feedbackMessage = viewModel.feedbackStatusMessage {
-                        Text(feedbackMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if viewModel.isMockModeEnabled && !viewModel.mockFeedbackEvents.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Mock Feedback Log")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            ForEach(Array(viewModel.mockFeedbackEvents.prefix(3))) { event in
-                                Text(
-                                    "\(event.outcome.title): \(event.suggestionId) at \(event.createdAt.formatted(date: .omitted, time: .shortened))"
-                                )
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
+                    if !viewModel.recentEvents.isEmpty {
+                        eventLayer
                     }
                 }
                 .padding(12)
@@ -650,6 +697,257 @@ private struct ThreadSuggestionRootView: View {
             .navigationTitle("Text Coach")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+
+    private var workflowLayer: some View {
+        LayerCard(
+            title: "Workflow",
+            subtitle: viewModel.workflowHint
+        ) {
+            if viewModel.presentationStyle == .compact {
+                Button("Open Full Composer") {
+                    onExpand()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(ThreadWorkflowStage.allCases, id: \.self) { stage in
+                        Text(stage.title)
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(
+                                stage == viewModel.workflowStage
+                                ? Color.accentColor.opacity(0.2)
+                                : Color.secondary.opacity(0.12)
+                            )
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            if let inserted = viewModel.lastInsertedDraft {
+                Text("Inserted draft: \(inserted)")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
+        }
+    }
+
+    private var contextLayer: some View {
+        LayerCard(
+            title: "Context Layer",
+            subtitle: "Mode and thread context"
+        ) {
+            Text("iMessage only shares limited thread context. Paste recent lines for better quality.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle("Local Mock Mode", isOn: mockModeBinding)
+
+            Button("Load Sample Transcript") {
+                viewModel.dispatch(.loadSampleTranscript)
+            }
+            .buttonStyle(.bordered)
+
+            if !viewModel.selectedMessageSummary.isEmpty {
+                Text("Selected thread context: \(viewModel.selectedMessageSummary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var composerLayer: some View {
+        LayerCard(
+            title: "Composer Layer",
+            subtitle: "Intent and source text"
+        ) {
+            Picker("Goal", selection: goalBinding) {
+                ForEach(ExtensionGoal.allCases) { goal in
+                    Text(goal.title).tag(goal)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Tone", selection: toneBinding) {
+                ForEach(ExtensionTone.allCases) { tone in
+                    Text(tone.title).tag(tone)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Picker("Relationship", selection: relationshipBinding) {
+                ForEach(ExtensionRelationshipType.allCases) { relationship in
+                    Text(relationship.title).tag(relationship)
+                }
+            }
+            .pickerStyle(.menu)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Extra Context")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("Anything important to include?", text: extraContextBinding)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Transcript (Them:/You:)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextEditor(text: transcriptBinding)
+                    .frame(minHeight: 120)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                    )
+            }
+
+            Button {
+                viewModel.dispatch(.generateTapped)
+            } label: {
+                if viewModel.isLoading && !viewModel.isMockModeEnabled {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Generate Drafts")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.canGenerate)
+        }
+    }
+
+    private var suggestionsLayer: some View {
+        LayerCard(
+            title: "Suggestions Layer",
+            subtitle: "Insert selected draft into thread"
+        ) {
+            if viewModel.usedFallback {
+                Text("Using local fallback suggestions.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            if viewModel.suggestions.isEmpty {
+                Text("No drafts yet. Generate to populate suggestions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(viewModel.suggestions) { suggestion in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(suggestion.text)
+                            .font(.body)
+                        Text(suggestion.rationale)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("Insert Draft") {
+                            onInsertDraft(suggestion)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(10)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+    }
+
+    private var feedbackLayer: some View {
+        LayerCard(
+            title: "Feedback Layer",
+            subtitle: "Log outcome to improve future suggestions"
+        ) {
+            Picker("Outcome", selection: outcomeBinding) {
+                ForEach(ExtensionFeedbackOutcome.allCases) { outcome in
+                    Text(outcome.title).tag(outcome)
+                }
+            }
+            .pickerStyle(.menu)
+
+            TextField("Optional feedback notes", text: notesBinding)
+                .textFieldStyle(.roundedBorder)
+
+            Button {
+                viewModel.dispatch(.submitFeedbackTapped)
+            } label: {
+                if viewModel.isSubmittingFeedback {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Submit Feedback")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!viewModel.canSubmitFeedback)
+
+            if let feedbackMessage = viewModel.feedbackStatusMessage {
+                Text(feedbackMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if viewModel.isMockModeEnabled && !viewModel.mockFeedbackEvents.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Mock Feedback Log")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(viewModel.mockFeedbackEvents.prefix(3))) { event in
+                        Text("\(event.outcome.title): \(event.suggestionId) at \(event.createdAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var eventLayer: some View {
+        LayerCard(
+            title: "Event Stream",
+            subtitle: "Recent UI events"
+        ) {
+            ForEach(viewModel.recentEvents.prefix(6), id: \.self) { event in
+                Text(event)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+private struct LayerCard<Content: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            content
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 

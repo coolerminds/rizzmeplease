@@ -1,28 +1,9 @@
 //
 //  TextCoachApp.swift
-//  TextCoach
+//  rizzmeplease MessagesExtension
 //
-//  AI-powered text message coach iOS application
+//  Placeholder file for the Messages extension target.
+//  The extension entry point is MessagesViewController via MainInterface.storyboard.
 //
 
-import SwiftUI
-
-@main
-struct TextCoachApp: App {
-    @StateObject private var appState = AppState()
-    @StateObject private var authManager = AuthenticationManager()
-    
-    var body: some Scene {
-        WindowGroup {
-            if authManager.isAuthenticated {
-                MainTabView()
-                    .environmentObject(appState)
-                    .environmentObject(authManager)
-            } else {
-                OnboardingView()
-                    .environmentObject(authManager)
-                    .environmentObject(appState)
-            }
-        }
-    }
-}
+import Foundation
