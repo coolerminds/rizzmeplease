@@ -250,7 +250,8 @@
 				DEVELOPMENT_TEAM = 27X6C7Q68U;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "rizzmeplease MessagesExtension/Info.plist";
-				INFOPLIST_KEY_API_BASE_URL = "https://rizzmeow.com/api/v1";
+				INFOPLIST_KEY_API_BASE_URL = "http://192.168.50.119:8000/api/v1";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = rizzmeplease;
 				INFOPLIST_KEY_ENABLE_DIRECT_GROK_FALLBACK = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -432,8 +433,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 27X6C7Q68U;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_API_BASE_URL = "https://rizzmeow.com/api/v1";
+				INFOPLIST_KEY_API_BASE_URL = "http://192.168.50.119:8000/api/v1";
 				INFOPLIST_KEY_ENABLE_DIRECT_GROK_FALLBACK = YES;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

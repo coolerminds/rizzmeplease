@@ -72,13 +72,16 @@ struct GrokConfig {
 
 actor BackendReplyService: ReplyService, DemoHistoryProviding {
     private let session: URLSession
-    private let baseURL: URL
+    private let baseURLProvider: @Sendable () -> URL
     private let tokenKey = "rizzcoach_access_token"
     private let tokenCreatedAtKey = "rizzcoach_access_token_created_at"
 
-    init(session: URLSession = .shared, baseURL: URL = AppRuntimeConfig.apiBaseURL) {
+    init(
+        session: URLSession = .shared,
+        baseURLProvider: @escaping @Sendable () -> URL = { AppRuntimeConfig.apiBaseURL }
+    ) {
         self.session = session
-        self.baseURL = baseURL
+        self.baseURLProvider = baseURLProvider
     }
 
     func generateReplies(request: ReplyRequest) async throws -> ReplyResponse {
@@ -93,7 +96,7 @@ actor BackendReplyService: ReplyService, DemoHistoryProviding {
     }
 
     func fetchDemoHistory() async throws -> [DemoHistoryRecord] {
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("history/demo"))
+        var urlRequest = URLRequest(url: currentBaseURL().appendingPathComponent("history/demo"))
         urlRequest.httpMethod = "GET"
 
         let (data, response) = try await perform(request: urlRequest)
@@ -138,7 +141,7 @@ actor BackendReplyService: ReplyService, DemoHistoryProviding {
             throw BackendReplyServiceError.invalidTranscript
         }
 
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("suggestions"))
+        var urlRequest = URLRequest(url: currentBaseURL().appendingPathComponent("suggestions"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -204,7 +207,7 @@ actor BackendReplyService: ReplyService, DemoHistoryProviding {
             return token
         }
 
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent("auth/anonymous"))
+        var urlRequest = URLRequest(url: currentBaseURL().appendingPathComponent("auth/anonymous"))
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body = AuthRequest(deviceId: UUID().uuidString)
@@ -268,6 +271,10 @@ actor BackendReplyService: ReplyService, DemoHistoryProviding {
             return []
         }
         return messages
+    }
+
+    private func currentBaseURL() -> URL {
+        baseURLProvider()
     }
 
     private func mapTone(_ vibe: Vibe) -> String {

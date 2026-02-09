@@ -1,6 +1,7 @@
 """Models package."""
 
 from src.models.schemas import (
+    AuthResponse,
     CoachAnalysisData,
     CoachAnalysisResponse,
     CoachAnalyzeRequest,
@@ -61,6 +62,7 @@ __all__ = [
     "ErrorResponse",
     "TokenData",
     "CreateUserRequest",
+    "AuthResponse",
     "DemoHistoryItem",
     "DemoHistoryData",
     "DemoHistoryResponse",

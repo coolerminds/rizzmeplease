@@ -1,2 +1,0 @@
-Target dependency graph (1 target)
-Target 'rizzmeplease MessagesExtension' in project 'rizzmeplease' (no dependencies)

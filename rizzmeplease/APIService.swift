@@ -10,7 +10,9 @@ import Foundation
 class APIService {
     static let shared = APIService()
     
-    private let baseURL = AppRuntimeConfig.apiBaseURLString
+    private var baseURL: String {
+        AppRuntimeConfig.apiBaseURLString
+    }
     private let session: URLSession
     
     init(session: URLSession = .shared) {

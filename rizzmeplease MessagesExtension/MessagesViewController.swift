@@ -1190,6 +1190,13 @@ private enum ThreadSuggestionServiceError: Error, LocalizedError {
 
 private actor ThreadSuggestionService {
     private let baseURLString: String = {
+        if let envValue = ProcessInfo.processInfo.environment["API_BASE_URL"] {
+            let trimmed = envValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
         if let configured = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String {
             let trimmed = configured.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {

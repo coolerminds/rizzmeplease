@@ -5,6 +5,10 @@ struct TokenShopView: View {
     let onPurchase: (TokenPack) -> Void
     let onWatchAd: () -> Void
     let tokenBalance: Int
+    #if DEBUG
+    @State private var apiBaseURLDraft = ""
+    @State private var apiConfigStatus: String?
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -42,9 +46,56 @@ struct TokenShopView: View {
                         }
                     }
                 }
+
+                #if DEBUG
+                Section("Debug API URL") {
+                    TextField("http://192.168.x.x:8000/api/v1", text: $apiBaseURLDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                        .keyboardType(.URL)
+
+                    Button("Apply Local URL") {
+                        let trimmed = apiBaseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else {
+                            AppRuntimeConfig.setDebugAPIBaseURLOverride(nil)
+                            apiConfigStatus = "Cleared override."
+                            return
+                        }
+
+                        guard URL(string: trimmed) != nil else {
+                            apiConfigStatus = "Invalid URL format."
+                            return
+                        }
+
+                        AppRuntimeConfig.setDebugAPIBaseURLOverride(trimmed)
+                        apiConfigStatus = "Applied override."
+                    }
+
+                    Button("Use Production URL") {
+                        AppRuntimeConfig.setDebugAPIBaseURLOverride(nil)
+                        apiBaseURLDraft = ""
+                        apiConfigStatus = "Using production API URL."
+                    }
+                    .foregroundStyle(.secondary)
+
+                    Text("Current: \(AppRuntimeConfig.apiBaseURLString)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    if let apiConfigStatus {
+                        Text(apiConfigStatus)
+                            .font(.footnote)
+                    }
+                }
+                #endif
             }
             .navigationTitle("Token Shop")
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .onAppear {
+            #if DEBUG
+            apiBaseURLDraft = AppRuntimeConfig.debugAPIBaseURLOverride ?? ""
+            #endif
         }
     }
 }

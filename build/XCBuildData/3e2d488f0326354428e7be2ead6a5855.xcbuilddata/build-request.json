@@ -6,7 +6,7 @@
   },
   "configuredTargets" : [
     {
-      "guid" : "8b42e1fb6c40286a043a106912dfdf4c208dc99690e36781441f859cdc43214d"
+      "guid" : "8b42e1fb6c40286a043a106912dfdf4ce307b7ccf93c05e8a4cc5b84166d410d"
     }
   ],
   "containerPath" : "/Volumes/4tb slow/devOPs/rizzmeplease/rizzmeplease.xcodeproj",
@@ -21,7 +21,6 @@
       "commandLine" : {
         "table" : {
           "CODE_SIGNING_ALLOWED" : "NO",
-          "CODE_SIGNING_REQUIRED" : "NO",
           "SDKROOT" : "iphonesimulator26.2"
         }
       },
