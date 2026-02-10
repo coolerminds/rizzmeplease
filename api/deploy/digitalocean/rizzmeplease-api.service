@@ -1,0 +1,19 @@
+[Unit]
+Description=RizzMePlease FastAPI API
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_ROOT__/api
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=__APP_ROOT__/api/.env
+ExecStart=__APP_ROOT__/api/.venv/bin/uvicorn src.main:app --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers --forwarded-allow-ips=*
+Restart=always
+RestartSec=5
+TimeoutStartSec=30
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
