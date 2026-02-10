@@ -11,12 +11,17 @@ via reverse proxy to this FastAPI app.
 
 ```bash
 cd api
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-Or with uv (faster):
+Or with uv:
 
 ```bash
+uv venv
+source .venv/bin/activate
 uv pip install -e ".[dev]"
 ```
 
@@ -100,6 +105,8 @@ api/
 │       ├── auth.py          # JWT authentication
 │       └── rate_limit.py    # Rate limiting
 ├── tests/                   # Test files
+├── deploy/
+│   └── digitalocean/        # systemd/nginx/scripts for DO deployment
 ├── schema.sql              # Database schema
 ├── pyproject.toml          # Python project config
 └── .env.example            # Environment template
@@ -128,19 +135,38 @@ ruff format src
 
 ## Deployment
 
-### Railway
+### DigitalOcean (recommended for `rizzmeow.com/api`)
+
+Deployment assets are in `deploy/digitalocean/`:
+
+- `bootstrap_droplet.sh`
+- `deploy_update.sh`
+- `rizzmeplease-api.service`
+- `nginx-rizzmeow.conf`
+
+Bootstrap on droplet:
 
 ```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login and deploy
-railway login
-railway init
-railway up
+sudo -i
+cd /tmp
+git clone https://github.com/<your-org>/<your-repo>.git
+cd <your-repo>/api/deploy/digitalocean
+chmod +x bootstrap_droplet.sh deploy_update.sh
+APP_ROOT=/opt/rizzmeplease \
+REPO_URL=https://github.com/<your-org>/<your-repo>.git \
+REPO_BRANCH=main \
+CERTBOT_EMAIL=you@rizzmeow.com \
+./bootstrap_droplet.sh
 ```
 
-### Docker
+Update deployment later:
+
+```bash
+cd /opt/rizzmeplease/api/deploy/digitalocean
+sudo ./deploy_update.sh
+```
+
+### Docker (optional)
 
 ```dockerfile
 FROM python:3.11-slim
@@ -152,10 +178,14 @@ CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ## iOS Integration
 
-Update the iOS app's `APIService.swift`:
+Set API base URL to:
 
 ```swift
-private let baseURL = "https://your-api-url.com/api/v1"
+https://rizzmeow.com/api/v1
 ```
 
-Then remove the `#if DEBUG` blocks in `AppState.swift` to use real API calls.
+For local phone testing, point Debug builds to:
+
+```text
+http://<your-mac-lan-ip>:8000/api/v1
+```
